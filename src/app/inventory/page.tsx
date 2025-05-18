@@ -12,6 +12,7 @@ import React, { useState, useRef } from 'react';
 import type { Part } from '@/lib/types';
 import { PartFormDialog, type PartFormData } from '@/components/inventory/PartFormDialog';
 import { DeletePartDialog } from '@/components/inventory/DeletePartDialog';
+import * as XLSX from 'xlsx';
 
 const initialMockParts: Part[] = [
   { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '$5.99', shelf: 'A1-01' },
@@ -20,6 +21,10 @@ const initialMockParts: Part[] = [
   { partName: 'Headlight Bulb H4', partNumber: 'P004', company: 'Philips', quantity: 200, category: 'Lighting', mrp: '$8.75', shelf: 'C3-10' },
   { partName: 'Air Filter A300', otherName: 'Engine Air Cleaner', partNumber: 'P005', company: 'K&N', quantity: 95, category: 'Filtration', mrp: '$18.20', shelf: 'A1-03' },
 ];
+
+// Expected Excel column order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
+const expectedColumns = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
+
 
 export default function InventoryPage() {
   const { toast } = useToast();
@@ -44,16 +49,18 @@ export default function InventoryPage() {
     if (!file) {
       toast({
         title: "No file selected",
-        description: "Please select a CSV file to import.",
+        description: "Please select an Excel file (.xlsx, .xls) to import.",
         variant: "destructive",
       });
       return;
     }
 
-    if (file.type !== 'text/csv') {
+    const validExtensions = ['.xlsx', '.xls'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validExtensions.includes(fileExtension)) {
       toast({
         title: "Invalid file type",
-        description: "Please select a CSV file.",
+        description: "Please select an Excel file (.xlsx or .xls).",
         variant: "destructive",
       });
       return;
@@ -61,8 +68,8 @@ export default function InventoryPage() {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      if (!text) {
+      const arrayBuffer = e.target?.result;
+      if (!arrayBuffer) {
         toast({
           title: "Error reading file",
           description: "Could not read the file content.",
@@ -72,26 +79,47 @@ export default function InventoryPage() {
       }
 
       try {
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        if (jsonData.length < 1) { // No data or only header
+            toast({
+                title: "Empty or invalid file",
+                description: "The Excel file is empty or does not contain valid data rows.",
+                variant: "destructive",
+            });
+            return;
+        }
+        
+        const headerRow = jsonData[0].map(String); // Convert all header cells to string
+        let startIndex = 0;
+        // Basic header check: if the first row looks like our expected headers, skip it
+        const isHeaderPresent = expectedColumns.every((col, index) => headerRow[index]?.trim().toLowerCase() === col.trim().toLowerCase());
+
+        if (isHeaderPresent) {
+            startIndex = 1;
+        }
+        
+        if (jsonData.length <= startIndex) {
+             toast({
+                title: "No data rows found",
+                description: "The Excel file only contains a header or is empty.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+
         const importedParts: Part[] = [];
-        const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-        
-        const headerLine = lines[0]?.toLowerCase();
-        // Basic header check, adjust keywords if your common headers are different
-        const headerKeywords = ['part name', 'partnumber', 'part number', 'company', 'category', 'qty', 'mrp', 'other name', 'shelf'];
-        const isHeaderPresent = headerLine && headerKeywords.some(keyword => headerLine.includes(keyword));
-        const startIndex = isHeaderPresent ? 1 : 0;
-        
-        for (let i = startIndex; i < lines.length; i++) {
-          const line = lines[i];
-          // Split by comma, but rudimentary: won't handle commas inside quoted fields well.
-          const values = line.split(',').map(value => value.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
-          
-          // Expected 8 columns as per the order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
-          if (values.length < 8) { 
-            console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns, got ${values.length})`);
+        for (let i = startIndex; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length < expectedColumns.length) {
+            console.warn(`Skipping malformed row ${i + 1}: Expected ${expectedColumns.length} columns, got ${row?.length || 0}. Row data: ${row}`);
             continue;
           }
-          
+
           const [
             partNameVal,      // values[0]
             otherNameVal,     // values[1]
@@ -101,38 +129,39 @@ export default function InventoryPage() {
             categoryVal,      // values[5]
             mrpVal,           // values[6]
             shelfVal          // values[7]
-          ] = values;
+          ] = row.map(cell => cell !== null && cell !== undefined ? String(cell).trim() : '');
+
 
           const quantity = parseInt(quantityStrVal, 10);
 
           if (isNaN(quantity)) {
-            console.warn(`Skipping line ${i + 1} due to invalid quantity: ${quantityStrVal}`);
+            console.warn(`Skipping row ${i + 1} due to invalid quantity: ${quantityStrVal}`);
             continue;
           }
 
           if (!partNumberVal || !partNameVal) {
-            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
+            console.warn(`Skipping row ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
             continue;
           }
 
           importedParts.push({
             partName: partNameVal,
-            otherName: otherNameVal || undefined, 
+            otherName: otherNameVal || undefined,
             partNumber: partNumberVal,
             company: companyVal || undefined,
             quantity,
             category: categoryVal,
-            mrp: mrpVal.startsWith('$') || mrpVal.startsWith('₹') ? mrpVal : `$${mrpVal}`,
+            mrp: typeof mrpVal === 'number' ? `$${mrpVal.toFixed(2)}` : (mrpVal.startsWith('$') || mrpVal.startsWith('₹') ? mrpVal : `$${mrpVal}`),
             shelf: shelfVal || undefined,
           });
         }
-
-        if (importedParts.length === 0 && lines.length > startIndex) {
+        
+        if (importedParts.length === 0 && jsonData.length > startIndex) {
             toast({
                 title: "No valid parts found",
-                description: "The CSV file might be empty or incorrectly formatted. Expected columns in order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. Ensure all 8 columns are present.",
+                description: `The Excel file might be empty or incorrectly formatted. Expected columns in order: ${expectedColumns.join(', ')}. Ensure all ${expectedColumns.length} columns are present.`,
                 variant: "destructive",
-                duration: 7000,
+                duration: 9000,
             });
             return;
         }
@@ -153,17 +182,17 @@ export default function InventoryPage() {
 
         toast({
           title: "Import Successful",
-          description: `${lines.length - startIndex} lines processed. ${uniqueNewPartsCount} new unique parts added to the inventory. ${importedParts.length - uniqueNewPartsCount} parts were duplicates or had issues and were skipped.`,
+          description: `${jsonData.length - startIndex} rows processed. ${uniqueNewPartsCount} new unique parts added. ${importedParts.length - uniqueNewPartsCount} parts were duplicates or had issues and were skipped.`,
           duration: 7000,
         });
 
       } catch (error) {
-        console.error("Error parsing CSV:", error);
+        console.error("Error parsing Excel file:", error);
         toast({
           title: "Import Failed",
-          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns in order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. Ensure all 8 columns are present.",
+          description: `There was an error parsing the Excel file. Please ensure it's correctly formatted and columns are in order: ${expectedColumns.join(', ')}. All ${expectedColumns.length} columns must be present.`,
           variant: "destructive",
-          duration: 7000,
+          duration: 9000,
         });
       } finally {
         if (fileInputRef.current) {
@@ -181,10 +210,10 @@ export default function InventoryPage() {
             fileInputRef.current.value = ""; // Reset file input
         }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
-  const handleExportToCSV = () => {
+  const handleExportToExcel = () => {
     if (mockParts.length === 0) {
       toast({
         title: "No Data to Export",
@@ -193,45 +222,41 @@ export default function InventoryPage() {
       });
       return;
     }
-    // CSV export order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
-    const headers = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
-    const csvRows = [
-      headers.join(','),
+    
+    const dataToExport = [
+      expectedColumns, // Header row
       ...mockParts.map(part => [
-        `"${(part.partName || '').replace(/"/g, '""')}"`,
-        `"${(part.otherName || '').replace(/"/g, '""')}"`,
-        `"${(part.partNumber || '').replace(/"/g, '""')}"`,
-        `"${(part.company || '').replace(/"/g, '""')}"`,
+        part.partName || '',
+        part.otherName || '',
+        part.partNumber || '',
+        part.company || '',
         part.quantity,
-        `"${(part.category || '').replace(/"/g, '""')}"`,
-        `"${(part.mrp || '').replace(/"/g, '""')}"`,
-        `"${(part.shelf || '').replace(/"/g, '""')}"`,
-      ].join(','))
+        part.category || '',
+        part.mrp || '',
+        part.shelf || '',
+      ])
     ];
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'inventory.csv');
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+    
+    try {
+      XLSX.writeFile(workbook, "inventory.xlsx");
       toast({
         title: "Export Successful",
-        description: "Inventory data has been exported to inventory.csv.",
+        description: "Inventory data has been exported to inventory.xlsx.",
       });
-    } else {
-       toast({
+    } catch (error) {
+      console.error("Error exporting to Excel:", error);
+      toast({
         title: "Export Failed",
-        description: "Your browser does not support direct CSV download.",
+        description: "An error occurred while exporting the data to Excel.",
         variant: "destructive"
       });
     }
   };
+
 
   const handleAddPartSubmit = (data: PartFormData) => {
     const newPart: Part = { ...data };
@@ -301,7 +326,7 @@ export default function InventoryPage() {
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept=".csv"
+          accept=".xlsx, .xls"
           style={{ display: 'none' }}
         />
 
@@ -312,10 +337,10 @@ export default function InventoryPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleImportClick}>
-              <Upload className="mr-2 h-4 w-4" /> Import CSV
+              <Upload className="mr-2 h-4 w-4" /> Import Excel
             </Button>
-            <Button variant="outline" onClick={handleExportToCSV}>
-              <Download className="mr-2 h-4 w-4" /> Export CSV
+            <Button variant="outline" onClick={handleExportToExcel}>
+              <Download className="mr-2 h-4 w-4" /> Export Excel
             </Button>
             <Button onClick={openAddPartDialog}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add Part
@@ -327,9 +352,9 @@ export default function InventoryPage() {
           <CardHeader>
             <CardTitle>Parts List</CardTitle>
             <CardDescription>
-              Browse, search, and manage your inventory parts. For CSV import, use columns in this order: 
-              Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. 
-              All 8 columns must be present, even if optional fields like 'Other Name', 'Company', or 'Shelf' are empty (use a comma as a placeholder).
+              Browse, search, and manage your inventory parts. For Excel import, use columns in this order: 
+              {expectedColumns.join(', ')}. 
+              The first row can optionally be headers. All {expectedColumns.length} columns must be present for data rows, even if optional fields are empty.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -383,7 +408,7 @@ export default function InventoryPage() {
             </Table>
             {filteredParts.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    {mockParts.length > 0 && searchTerm ? 'No parts match your search.' : 'No parts found. Add new parts or import from a CSV file to get started.'}
+                    {mockParts.length > 0 && searchTerm ? 'No parts match your search.' : 'No parts found. Add new parts or import from an Excel file to get started.'}
                 </div>
             )}
           </CardContent>
@@ -417,3 +442,4 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
+
