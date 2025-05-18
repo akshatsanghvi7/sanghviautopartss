@@ -13,6 +13,7 @@ import type { Part } from '@/lib/types';
 import { PartFormDialog, type PartFormData } from '@/components/inventory/PartFormDialog';
 import { DeletePartDialog } from '@/components/inventory/DeletePartDialog';
 import * as XLSX from 'xlsx';
+import useLocalStorage from '@/hooks/useLocalStorage';
 
 const initialMockParts: Part[] = [
   { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '$5.99', shelf: 'A1-01' },
@@ -28,7 +29,7 @@ const expectedColumns = ["Part Name", "Other Name", "Part Number", "Company", "Q
 
 export default function InventoryPage() {
   const { toast } = useToast();
-  const [mockParts, setMockParts] = useState<Part[]>(initialMockParts);
+  const [mockParts, setMockParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', initialMockParts);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isAddPartDialogOpen, setIsAddPartDialogOpen] = useState(false);
@@ -119,7 +120,7 @@ export default function InventoryPage() {
             console.warn(`Skipping malformed row ${i + 1}: Expected ${expectedColumns.length} columns, got ${row?.length || 0}. Row data: ${row}`);
             continue;
           }
-
+          // Expected order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
           const [
             partNameVal,      // values[0]
             otherNameVal,     // values[1]
