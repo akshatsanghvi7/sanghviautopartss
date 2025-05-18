@@ -9,18 +9,9 @@ import { PlusCircle, Download, Upload, Search, Edit2, Trash2 } from 'lucide-reac
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useRef } from 'react';
-
-// Define Part type matching new attributes
-interface Part {
-  partName: string;
-  otherName?: string;
-  partNumber: string; // Used as unique ID
-  company?: string;
-  quantity: number;
-  category: string;
-  mrp: string;
-  shelf?: string;
-}
+import type { Part } from '@/lib/types';
+import { PartFormDialog, type PartFormData } from '@/components/inventory/PartFormDialog';
+import { DeletePartDialog } from '@/components/inventory/DeletePartDialog';
 
 const initialMockParts: Part[] = [
   { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '$5.99', shelf: 'A1-01' },
@@ -34,6 +25,13 @@ export default function InventoryPage() {
   const { toast } = useToast();
   const [mockParts, setMockParts] = useState<Part[]>(initialMockParts);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isAddPartDialogOpen, setIsAddPartDialogOpen] = useState(false);
+  const [isEditPartDialogOpen, setIsEditPartDialogOpen] = useState(false);
+  const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
+  const [partToEdit, setPartToEdit] = useState<Part | null>(null);
+  const [partToDelete, setPartToDelete] = useState<Part | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleImportClick = () => {
     if (fileInputRef.current) {
@@ -74,19 +72,16 @@ export default function InventoryPage() {
       }
 
       try {
-        const newParts: Part[] = [];
+        const importedParts: Part[] = [];
         const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
         
         const headerLine = lines[0]?.toLowerCase();
-        // A more robust header check might be needed, this is a simple check
         const startIndex = (headerLine?.includes('part name') || headerLine?.includes('partnumber') || headerLine?.includes('part number')) ? 1 : 0;
-        let uniqueNewPartsCount = 0;
-
+        
         for (let i = startIndex; i < lines.length; i++) {
           const line = lines[i];
           const values = line.split(',').map(value => value.trim());
           
-          // Expecting: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
           if (values.length < 8) { 
             console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns)`);
             continue;
@@ -105,19 +100,19 @@ export default function InventoryPage() {
             continue;
           }
 
-          newParts.push({
+          importedParts.push({
             partName,
             otherName: otherName || undefined,
             partNumber,
             company: company || undefined,
             quantity,
             category,
-            mrp: mrp.startsWith('$') ? mrp : `$${mrp}`,
+            mrp: mrp.startsWith('$') || mrp.startsWith('₹') ? mrp : `$${mrp}`, // Basic currency prefixing
             shelf: shelf || undefined,
           });
         }
 
-        if (newParts.length === 0 && lines.length > startIndex) {
+        if (importedParts.length === 0 && lines.length > startIndex) {
             toast({
                 title: "No valid parts found",
                 description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.",
@@ -126,16 +121,17 @@ export default function InventoryPage() {
             return;
         }
         
+        let uniqueNewPartsCount = 0;
         setMockParts(prevParts => {
           const existingPartNumbers = new Set(prevParts.map(p => p.partNumber));
-          const uniqueNewParts = newParts.filter(np => !existingPartNumbers.has(np.partNumber));
+          const uniqueNewParts = importedParts.filter(np => !existingPartNumbers.has(np.partNumber));
           uniqueNewPartsCount = uniqueNewParts.length;
           return [...prevParts, ...uniqueNewParts];
         });
 
         toast({
           title: "Import Successful",
-          description: `${newParts.length} parts processed. ${uniqueNewPartsCount} new parts added to the inventory.`,
+          description: `${importedParts.length} parts processed. ${uniqueNewPartsCount} new unique parts added to the inventory.`,
         });
 
       } catch (error) {
@@ -164,34 +160,115 @@ export default function InventoryPage() {
     reader.readAsText(file);
   };
 
-  const handleExportClick = () => {
+  const handleExportToCSV = () => {
+    if (mockParts.length === 0) {
+      toast({
+        title: "No Data to Export",
+        description: "There are no parts in the inventory to export.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const headers = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
+    const csvRows = [
+      headers.join(','),
+      ...mockParts.map(part => [
+        `"${part.partName.replace(/"/g, '""')}"`, // Escape double quotes
+        `"${(part.otherName || '').replace(/"/g, '""')}"`,
+        `"${part.partNumber.replace(/"/g, '""')}"`,
+        `"${(part.company || '').replace(/"/g, '""')}"`,
+        part.quantity,
+        `"${part.category.replace(/"/g, '""')}"`,
+        `"${part.mrp.replace(/"/g, '""')}"`,
+        `"${(part.shelf || '').replace(/"/g, '""')}"`,
+      ].join(','))
+    ];
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'inventory.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Export Successful",
+        description: "Inventory data has been exported to inventory.csv.",
+      });
+    } else {
+       toast({
+        title: "Export Failed",
+        description: "Your browser does not support direct CSV download.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddPartSubmit = (data: PartFormData) => {
+    const newPart: Part = { ...data };
+    setMockParts(prevParts => [...prevParts, newPart]);
     toast({
-      title: "Export Action",
-      description: "Export functionality is not implemented yet.",
+      title: "Part Added",
+      description: `${data.partName} has been added to the inventory.`,
     });
   };
 
-  const handleAddPartClick = () => {
+  const handleEditPartSubmit = (data: PartFormData, originalPartNumber?: string) => {
+    if (!originalPartNumber) return; // Should not happen in edit mode
+
+    setMockParts(prevParts =>
+      prevParts.map(part =>
+        part.partNumber === originalPartNumber ? { ...part, ...data, partNumber: originalPartNumber } : part
+      )
+    );
     toast({
-      title: "Add Part Action",
-      description: "Add part functionality is not implemented yet.",
+      title: "Part Updated",
+      description: `${data.partName} has been updated.`,
     });
+    setPartToEdit(null);
   };
 
-  const handleEditPartClick = (partNum: string) => {
-    toast({
-      title: "Edit Part",
-      description: `Edit functionality for part ${partNum} is not implemented yet.`,
-    });
+  const openAddPartDialog = () => {
+    setPartToEdit(null);
+    setIsAddPartDialogOpen(true);
   };
 
-  const handleDeletePartClick = (partNum: string) => {
-    toast({
-      title: "Delete Part",
-      description: `Delete functionality for part ${partNum} is not implemented yet.`,
-      variant: "destructive",
-    });
+  const openEditPartDialog = (part: Part) => {
+    setPartToEdit(part);
+    setIsEditPartDialogOpen(true);
   };
+
+  const openDeleteConfirmDialog = (part: Part) => {
+    setPartToDelete(part);
+    setIsDeleteConfirmDialogOpen(true);
+  };
+
+  const confirmDeletePart = () => {
+    if (partToDelete) {
+      setMockParts(prevParts => prevParts.filter(p => p.partNumber !== partToDelete.partNumber));
+      toast({
+        title: "Part Deleted",
+        description: `${partToDelete.partName} has been deleted.`,
+        variant: "destructive",
+      });
+      setPartToDelete(null);
+    }
+    setIsDeleteConfirmDialogOpen(false);
+  };
+  
+  const filteredParts = mockParts.filter(part =>
+    part.partName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    part.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (part.otherName && part.otherName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (part.company && part.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    part.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
 
   return (
     <AppLayout>
@@ -213,10 +290,10 @@ export default function InventoryPage() {
             <Button variant="outline" onClick={handleImportClick}>
               <Upload className="mr-2 h-4 w-4" /> Import CSV
             </Button>
-            <Button variant="outline" onClick={handleExportClick}>
-              <Download className="mr-2 h-4 w-4" /> Export
+            <Button variant="outline" onClick={handleExportToCSV}>
+              <Download className="mr-2 h-4 w-4" /> Export CSV
             </Button>
-            <Button onClick={handleAddPartClick}>
+            <Button onClick={openAddPartDialog}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add Part
             </Button>
           </div>
@@ -228,7 +305,12 @@ export default function InventoryPage() {
             <CardDescription>Browse, search, and manage your inventory parts. For CSV import, use columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.</CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by part name or number..." className="pl-10 w-full sm:w-1/2 lg:w-1/3" />
+              <Input 
+                placeholder="Search by name, number, company, category..." 
+                className="pl-10 w-full sm:w-1/2 lg:w-1/3" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </CardHeader>
           <CardContent>
@@ -247,7 +329,7 @@ export default function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockParts.map((part) => (
+                {filteredParts.map((part) => (
                   <TableRow key={part.partNumber}>
                     <TableCell className="font-medium">{part.partName}</TableCell>
                     <TableCell>{part.otherName || '-'}</TableCell>
@@ -258,11 +340,11 @@ export default function InventoryPage() {
                     <TableCell className="text-right">{part.mrp}</TableCell>
                     <TableCell>{part.shelf || '-'}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditPartClick(part.partNumber)}>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => openEditPartDialog(part)}>
                         <Edit2 className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeletePartClick(part.partNumber)}>
+                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => openDeleteConfirmDialog(part)}>
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>
@@ -271,14 +353,39 @@ export default function InventoryPage() {
                 ))}
               </TableBody>
             </Table>
-            {mockParts.length === 0 && (
+            {filteredParts.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    No parts found. Add new parts or import from a CSV file to get started.
+                    {mockParts.length > 0 && searchTerm ? 'No parts match your search.' : 'No parts found. Add new parts or import from a CSV file to get started.'}
                 </div>
             )}
           </CardContent>
         </Card>
       </div>
+      <PartFormDialog
+        isOpen={isAddPartDialogOpen}
+        onOpenChange={setIsAddPartDialogOpen}
+        onSubmit={handleAddPartSubmit}
+        dialogTitle="Add New Part"
+        existingPartNumbers={mockParts.map(p => p.partNumber)}
+      />
+      {partToEdit && (
+        <PartFormDialog
+          isOpen={isEditPartDialogOpen}
+          onOpenChange={setIsEditPartDialogOpen}
+          onSubmit={handleEditPartSubmit}
+          initialData={partToEdit}
+          dialogTitle="Edit Part"
+          existingPartNumbers={mockParts.map(p => p.partNumber).filter(pn => pn !== partToEdit.partNumber)} // Exclude current part's number for unique check context
+        />
+      )}
+      {partToDelete && (
+         <DeletePartDialog
+            isOpen={isDeleteConfirmDialogOpen}
+            onOpenChange={setIsDeleteConfirmDialogOpen}
+            onConfirm={confirmDeletePart}
+            partName={partToDelete.partName}
+          />
+      )}
     </AppLayout>
   );
 }
