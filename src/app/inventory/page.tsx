@@ -76,47 +76,63 @@ export default function InventoryPage() {
         const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
         
         const headerLine = lines[0]?.toLowerCase();
-        const startIndex = (headerLine?.includes('part name') || headerLine?.includes('partnumber') || headerLine?.includes('part number')) ? 1 : 0;
+        // Basic header check, adjust keywords if your common headers are different
+        const headerKeywords = ['part name', 'partnumber', 'part number', 'company', 'category', 'qty', 'mrp'];
+        const isHeaderPresent = headerLine && headerKeywords.some(keyword => headerLine.includes(keyword));
+        const startIndex = isHeaderPresent ? 1 : 0;
         
         for (let i = startIndex; i < lines.length; i++) {
           const line = lines[i];
-          const values = line.split(',').map(value => value.trim());
+          // Split by comma, but rudimentary: won't handle commas inside quoted fields well.
+          const values = line.split(',').map(value => value.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
           
+          // Expect 8 columns as per the new order: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name
           if (values.length < 8) { 
-            console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns)`);
+            console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns, got ${values.length})`);
             continue;
           }
           
-          const [partName, otherName, partNumber, company, quantityStr, category, mrp, shelf] = values;
-          const quantity = parseInt(quantityStr, 10);
+          const [
+            csvPartName,     // values[0]
+            csvCompany,      // values[1]
+            csvPartNumber,   // values[2]
+            csvCategory,     // values[3]
+            csvQuantityStr,  // values[4]
+            csvMrp,          // values[5]
+            csvShelf,        // values[6]
+            csvOtherName     // values[7]
+          ] = values;
+
+          const quantity = parseInt(csvQuantityStr, 10);
 
           if (isNaN(quantity)) {
-            console.warn(`Skipping line ${i + 1} due to invalid quantity: ${quantityStr}`);
+            console.warn(`Skipping line ${i + 1} due to invalid quantity: ${csvQuantityStr}`);
             continue;
           }
 
-          if (!partNumber || !partName) {
-            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name.`);
+          if (!csvPartNumber || !csvPartName) {
+            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name (Part Number: ${csvPartNumber}, Part Name: ${csvPartName}).`);
             continue;
           }
 
           importedParts.push({
-            partName,
-            otherName: otherName || undefined,
-            partNumber,
-            company: company || undefined,
+            partName: csvPartName,
+            otherName: csvOtherName || undefined, 
+            partNumber: csvPartNumber,
+            company: csvCompany || undefined,
             quantity,
-            category,
-            mrp: mrp.startsWith('$') || mrp.startsWith('₹') ? mrp : `$${mrp}`, // Basic currency prefixing
-            shelf: shelf || undefined,
+            category: csvCategory,
+            mrp: csvMrp.startsWith('$') || csvMrp.startsWith('₹') ? csvMrp : `$${csvMrp}`,
+            shelf: csvShelf || undefined,
           });
         }
 
         if (importedParts.length === 0 && lines.length > startIndex) {
             toast({
                 title: "No valid parts found",
-                description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.",
+                description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional).",
                 variant: "destructive",
+                duration: 7000,
             });
             return;
         }
@@ -124,26 +140,34 @@ export default function InventoryPage() {
         let uniqueNewPartsCount = 0;
         setMockParts(prevParts => {
           const existingPartNumbers = new Set(prevParts.map(p => p.partNumber));
-          const uniqueNewParts = importedParts.filter(np => !existingPartNumbers.has(np.partNumber));
+          const uniqueNewParts = importedParts.filter(np => {
+            if(existingPartNumbers.has(np.partNumber)) {
+                console.warn(`Part number ${np.partNumber} already exists. Skipping.`);
+                return false;
+            }
+            return true;
+          });
           uniqueNewPartsCount = uniqueNewParts.length;
           return [...prevParts, ...uniqueNewParts];
         });
 
         toast({
           title: "Import Successful",
-          description: `${importedParts.length} parts processed. ${uniqueNewPartsCount} new unique parts added to the inventory.`,
+          description: `${lines.length - startIndex} lines processed. ${uniqueNewPartsCount} new unique parts added to the inventory. ${importedParts.length - uniqueNewPartsCount} parts were duplicates or had issues and were skipped.`,
+          duration: 7000,
         });
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
         toast({
           title: "Import Failed",
-          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.",
+          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional).",
           variant: "destructive",
+          duration: 7000,
         });
       } finally {
         if (fileInputRef.current) {
-            fileInputRef.current.value = "";
+            fileInputRef.current.value = ""; // Reset file input
         }
       }
     };
@@ -154,7 +178,7 @@ export default function InventoryPage() {
           variant: "destructive",
         });
          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
+            fileInputRef.current.value = ""; // Reset file input
         }
     };
     reader.readAsText(file);
@@ -169,19 +193,19 @@ export default function InventoryPage() {
       });
       return;
     }
-
-    const headers = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
+    // New CSV export order: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name
+    const headers = ["Part Name", "Company", "Part Number", "Category", "Qty", "MRP", "Shelf", "Other Name"];
     const csvRows = [
       headers.join(','),
       ...mockParts.map(part => [
-        `"${part.partName.replace(/"/g, '""')}"`, // Escape double quotes
-        `"${(part.otherName || '').replace(/"/g, '""')}"`,
-        `"${part.partNumber.replace(/"/g, '""')}"`,
+        `"${(part.partName || '').replace(/"/g, '""')}"`,
         `"${(part.company || '').replace(/"/g, '""')}"`,
+        `"${(part.partNumber || '').replace(/"/g, '""')}"`,
+        `"${(part.category || '').replace(/"/g, '""')}"`,
         part.quantity,
-        `"${part.category.replace(/"/g, '""')}"`,
-        `"${part.mrp.replace(/"/g, '""')}"`,
+        `"${(part.mrp || '').replace(/"/g, '""')}"`,
         `"${(part.shelf || '').replace(/"/g, '""')}"`,
+        `"${(part.otherName || '').replace(/"/g, '""')}"`,
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -219,7 +243,7 @@ export default function InventoryPage() {
   };
 
   const handleEditPartSubmit = (data: PartFormData, originalPartNumber?: string) => {
-    if (!originalPartNumber) return; // Should not happen in edit mode
+    if (!originalPartNumber) return; 
 
     setMockParts(prevParts =>
       prevParts.map(part =>
@@ -262,11 +286,11 @@ export default function InventoryPage() {
   };
   
   const filteredParts = mockParts.filter(part =>
-    part.partName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    part.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (part.partName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (part.partNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (part.otherName && part.otherName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (part.company && part.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    part.category.toLowerCase().includes(searchTerm.toLowerCase())
+    (part.category?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
 
@@ -302,7 +326,10 @@ export default function InventoryPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Parts List</CardTitle>
-            <CardDescription>Browse, search, and manage your inventory parts. For CSV import, use columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.</CardDescription>
+            <CardDescription>
+              Browse, search, and manage your inventory parts. For CSV import, use columns in this order: 
+              Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional - column must exist, can be empty).
+            </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
@@ -375,7 +402,7 @@ export default function InventoryPage() {
           onSubmit={handleEditPartSubmit}
           initialData={partToEdit}
           dialogTitle="Edit Part"
-          existingPartNumbers={mockParts.map(p => p.partNumber).filter(pn => pn !== partToEdit.partNumber)} // Exclude current part's number for unique check context
+          existingPartNumbers={mockParts.map(p => p.partNumber).filter(pn => pn !== partToEdit.partNumber)}
         />
       )}
       {partToDelete && (
