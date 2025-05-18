@@ -8,23 +8,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Download, Upload, Search, Edit2, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import React, { useState, useRef } from 'react'; // Added useRef and useState
+import React, { useState, useRef } from 'react';
 
-// Define Part type matching mock data structure
+// Define Part type matching new attributes
 interface Part {
-  id: string;
-  name: string;
-  category: string;
+  partName: string;
+  otherName?: string;
+  partNumber: string; // Used as unique ID
+  company?: string;
   quantity: number;
-  price: string;
+  category: string;
+  mrp: string;
+  shelf?: string;
 }
 
 const initialMockParts: Part[] = [
-  { id: 'P001', name: 'Spark Plug X100', category: 'Engine', quantity: 150, price: '$5.99' },
-  { id: 'P002', name: 'Oil Filter Z20', category: 'Engine', quantity: 80, price: '$12.50' },
-  { id: 'P003', name: 'Brake Pad Set F5', category: 'Brakes', quantity: 120, price: '$45.00' },
-  { id: 'P004', name: 'Headlight Bulb H4', category: 'Lighting', quantity: 200, price: '$8.75' },
-  { id: 'P005', name: 'Air Filter A300', category: 'Filtration', quantity: 95, price: '$18.20' },
+  { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '$5.99', shelf: 'A1-01' },
+  { partName: 'Oil Filter Z20', partNumber: 'P002', company: 'Mann-Filter', quantity: 80, category: 'Engine', mrp: '$12.50', shelf: 'A1-02' },
+  { partName: 'Brake Pad Set F5', otherName: 'Front Brakes', partNumber: 'P003', company: 'Brembo', quantity: 120, category: 'Brakes', mrp: '$45.00', shelf: 'B2-05' },
+  { partName: 'Headlight Bulb H4', partNumber: 'P004', company: 'Philips', quantity: 200, category: 'Lighting', mrp: '$8.75', shelf: 'C3-10' },
+  { partName: 'Air Filter A300', otherName: 'Engine Air Cleaner', partNumber: 'P005', company: 'K&N', quantity: 95, category: 'Filtration', mrp: '$18.20', shelf: 'A1-03' },
 ];
 
 export default function InventoryPage() {
@@ -72,25 +75,24 @@ export default function InventoryPage() {
 
       try {
         const newParts: Part[] = [];
-        const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== ''); // Split by new line and remove empty lines
+        const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
         
-        // Skip header row if present (optional, simple check for common headers)
         const headerLine = lines[0]?.toLowerCase();
-        const startIndex = (headerLine?.includes('part number') || headerLine?.includes('name') || headerLine?.includes('id')) ? 1 : 0;
+        // A more robust header check might be needed, this is a simple check
+        const startIndex = (headerLine?.includes('part name') || headerLine?.includes('partnumber') || headerLine?.includes('part number')) ? 1 : 0;
         let uniqueNewPartsCount = 0;
 
         for (let i = startIndex; i < lines.length; i++) {
           const line = lines[i];
-          // Basic CSV parsing: split by comma, trim whitespace.
-          // This doesn't handle commas within quoted fields. For robust parsing, a library would be better.
           const values = line.split(',').map(value => value.trim());
           
-          if (values.length < 5) { // Expecting Part Number, Name, Category, Quantity, Price
-            console.warn(`Skipping malformed line ${i + 1}: ${line}`);
+          // Expecting: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
+          if (values.length < 8) { 
+            console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns)`);
             continue;
           }
           
-          const [id, name, category, quantityStr, price] = values;
+          const [partName, otherName, partNumber, company, quantityStr, category, mrp, shelf] = values;
           const quantity = parseInt(quantityStr, 10);
 
           if (isNaN(quantity)) {
@@ -98,35 +100,35 @@ export default function InventoryPage() {
             continue;
           }
 
-          // Basic validation: ensure id and name are present
-          if (!id || !name) {
-            console.warn(`Skipping line ${i + 1} due to missing ID or Name.`);
+          if (!partNumber || !partName) {
+            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name.`);
             continue;
           }
 
           newParts.push({
-            id,
-            name,
-            category,
+            partName,
+            otherName: otherName || undefined,
+            partNumber,
+            company: company || undefined,
             quantity,
-            price: price.startsWith('$') ? price : `$${price}`, // Ensure price has a $ prefix
+            category,
+            mrp: mrp.startsWith('$') ? mrp : `$${mrp}`,
+            shelf: shelf || undefined,
           });
         }
 
         if (newParts.length === 0 && lines.length > startIndex) {
             toast({
                 title: "No valid parts found",
-                description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Number, Name, Category, Quantity, Price.",
+                description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.",
                 variant: "destructive",
             });
             return;
         }
         
-        // For demonstration, we'll merge new parts with existing ones.
-        // A more sophisticated approach might involve checking for duplicates or updating existing parts.
         setMockParts(prevParts => {
-          const existingIds = new Set(prevParts.map(p => p.id));
-          const uniqueNewParts = newParts.filter(np => !existingIds.has(np.id));
+          const existingPartNumbers = new Set(prevParts.map(p => p.partNumber));
+          const uniqueNewParts = newParts.filter(np => !existingPartNumbers.has(np.partNumber));
           uniqueNewPartsCount = uniqueNewParts.length;
           return [...prevParts, ...uniqueNewParts];
         });
@@ -140,11 +142,10 @@ export default function InventoryPage() {
         console.error("Error parsing CSV:", error);
         toast({
           title: "Import Failed",
-          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns: Part Number, Name, Category, Quantity, Price.",
+          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.",
           variant: "destructive",
         });
       } finally {
-        // Reset file input value to allow re-uploading the same file
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
@@ -177,17 +178,17 @@ export default function InventoryPage() {
     });
   };
 
-  const handleEditPartClick = (partId: string) => {
+  const handleEditPartClick = (partNum: string) => {
     toast({
       title: "Edit Part",
-      description: `Edit functionality for part ${partId} is not implemented yet.`,
+      description: `Edit functionality for part ${partNum} is not implemented yet.`,
     });
   };
 
-  const handleDeletePartClick = (partId: string) => {
+  const handleDeletePartClick = (partNum: string) => {
     toast({
       title: "Delete Part",
-      description: `Delete functionality for part ${partId} is not implemented yet.`,
+      description: `Delete functionality for part ${partNum} is not implemented yet.`,
       variant: "destructive",
     });
   };
@@ -195,7 +196,6 @@ export default function InventoryPage() {
   return (
     <AppLayout>
       <div className="flex flex-col gap-6">
-        {/* Hidden file input */}
         <input
           type="file"
           ref={fileInputRef}
@@ -225,38 +225,44 @@ export default function InventoryPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Parts List</CardTitle>
-            <CardDescription>Browse, search, and manage your inventory parts. For CSV import, use columns: Part Number, Name, Category, Quantity, Price.</CardDescription>
+            <CardDescription>Browse, search, and manage your inventory parts. For CSV import, use columns: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf.</CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by part number or name..." className="pl-10 w-full sm:w-1/2 lg:w-1/3" />
+              <Input placeholder="Search by part name or number..." className="pl-10 w-full sm:w-1/2 lg:w-1/3" />
             </div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Part Name</TableHead>
+                  <TableHead>Other Name</TableHead>
                   <TableHead>Part Number</TableHead>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">MRP</TableHead>
+                  <TableHead>Shelf</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {mockParts.map((part) => (
-                  <TableRow key={part.id}>
-                    <TableCell className="font-medium">{part.id}</TableCell>
-                    <TableCell>{part.name}</TableCell>
-                    <TableCell>{part.category}</TableCell>
+                  <TableRow key={part.partNumber}>
+                    <TableCell className="font-medium">{part.partName}</TableCell>
+                    <TableCell>{part.otherName || '-'}</TableCell>
+                    <TableCell>{part.partNumber}</TableCell>
+                    <TableCell>{part.company || '-'}</TableCell>
                     <TableCell className="text-right">{part.quantity}</TableCell>
-                    <TableCell className="text-right">{part.price}</TableCell>
+                    <TableCell>{part.category}</TableCell>
+                    <TableCell className="text-right">{part.mrp}</TableCell>
+                    <TableCell>{part.shelf || '-'}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditPartClick(part.id)}>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditPartClick(part.partNumber)}>
                         <Edit2 className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeletePartClick(part.id)}>
+                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeletePartClick(part.partNumber)}>
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>

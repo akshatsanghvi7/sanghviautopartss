@@ -1,3 +1,4 @@
+
 export type User = {
   id: string;
   username: string;
@@ -6,16 +7,18 @@ export type User = {
 };
 
 export type Part = {
-  id: string;
-  partNumber: string;
-  name: string;
-  description: string;
-  category?: string; // AI-suggested
+  partName: string;
+  otherName?: string;
+  partNumber: string; // Unique identifier
+  company?: string;
+  description?: string; // Keeping this for potential future use or AI categorization
+  category?: string; // AI-suggested or user-defined
   quantity: number;
-  costPrice: number;
-  sellingPrice: number;
+  costPrice?: number; // Optional for now, as MRP is requested
+  sellingPrice?: number; // This could be the same as MRP or different
+  mrp: string; // Renamed from price, and as per user request
+  shelf?: string;
   supplierId?: string; 
-  // lowStockThreshold?: number;
 };
 
 export type Sale = {
