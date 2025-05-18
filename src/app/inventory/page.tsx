@@ -1,9 +1,13 @@
+
+"use client";
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PlusCircle, Download, Upload, Search, Edit2, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from "@/hooks/use-toast"; // Added import
 
 // Mock data for demonstration
 const mockParts = [
@@ -15,6 +19,44 @@ const mockParts = [
 ];
 
 export default function InventoryPage() {
+  const { toast } = useToast(); // Initialize toast
+
+  const handleImportClick = () => {
+    toast({
+      title: "Import Action",
+      description: "Import functionality is not implemented yet.",
+    });
+  };
+
+  const handleExportClick = () => {
+    toast({
+      title: "Export Action",
+      description: "Export functionality is not implemented yet.",
+    });
+  };
+
+  const handleAddPartClick = () => {
+    toast({
+      title: "Add Part Action",
+      description: "Add part functionality is not implemented yet.",
+    });
+  };
+
+  const handleEditPartClick = (partId: string) => {
+    toast({
+      title: "Edit Part",
+      description: `Edit functionality for part ${partId} is not implemented yet.`,
+    });
+  };
+
+  const handleDeletePartClick = (partId: string) => {
+    toast({
+      title: "Delete Part",
+      description: `Delete functionality for part ${partId} is not implemented yet.`,
+      variant: "destructive",
+    });
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-col gap-6">
@@ -24,13 +66,13 @@ export default function InventoryPage() {
             <p className="text-muted-foreground">Manage your automotive parts stock efficiently.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleImportClick}>
               <Upload className="mr-2 h-4 w-4" /> Import
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExportClick}>
               <Download className="mr-2 h-4 w-4" /> Export
             </Button>
-            <Button>
+            <Button onClick={handleAddPartClick}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add Part
             </Button>
           </div>
@@ -66,11 +108,11 @@ export default function InventoryPage() {
                     <TableCell className="text-right">{part.quantity}</TableCell>
                     <TableCell className="text-right">{part.price}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary">
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditPartClick(part.id)}>
                         <Edit2 className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-destructive">
+                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeletePartClick(part.id)}>
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>
