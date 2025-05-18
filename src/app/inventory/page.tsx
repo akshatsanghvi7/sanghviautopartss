@@ -77,7 +77,7 @@ export default function InventoryPage() {
         
         const headerLine = lines[0]?.toLowerCase();
         // Basic header check, adjust keywords if your common headers are different
-        const headerKeywords = ['part name', 'partnumber', 'part number', 'company', 'category', 'qty', 'mrp'];
+        const headerKeywords = ['part name', 'partnumber', 'part number', 'company', 'category', 'qty', 'mrp', 'other name', 'shelf'];
         const isHeaderPresent = headerLine && headerKeywords.some(keyword => headerLine.includes(keyword));
         const startIndex = isHeaderPresent ? 1 : 0;
         
@@ -86,51 +86,51 @@ export default function InventoryPage() {
           // Split by comma, but rudimentary: won't handle commas inside quoted fields well.
           const values = line.split(',').map(value => value.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
           
-          // Expect 8 columns as per the new order: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name
+          // Expected 8 columns as per the order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
           if (values.length < 8) { 
             console.warn(`Skipping malformed line ${i + 1}: ${line} (expected 8 columns, got ${values.length})`);
             continue;
           }
           
           const [
-            csvPartName,     // values[0]
-            csvCompany,      // values[1]
-            csvPartNumber,   // values[2]
-            csvCategory,     // values[3]
-            csvQuantityStr,  // values[4]
-            csvMrp,          // values[5]
-            csvShelf,        // values[6]
-            csvOtherName     // values[7]
+            partNameVal,      // values[0]
+            otherNameVal,     // values[1]
+            partNumberVal,    // values[2]
+            companyVal,       // values[3]
+            quantityStrVal,   // values[4]
+            categoryVal,      // values[5]
+            mrpVal,           // values[6]
+            shelfVal          // values[7]
           ] = values;
 
-          const quantity = parseInt(csvQuantityStr, 10);
+          const quantity = parseInt(quantityStrVal, 10);
 
           if (isNaN(quantity)) {
-            console.warn(`Skipping line ${i + 1} due to invalid quantity: ${csvQuantityStr}`);
+            console.warn(`Skipping line ${i + 1} due to invalid quantity: ${quantityStrVal}`);
             continue;
           }
 
-          if (!csvPartNumber || !csvPartName) {
-            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name (Part Number: ${csvPartNumber}, Part Name: ${csvPartName}).`);
+          if (!partNumberVal || !partNameVal) {
+            console.warn(`Skipping line ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
             continue;
           }
 
           importedParts.push({
-            partName: csvPartName,
-            otherName: csvOtherName || undefined, 
-            partNumber: csvPartNumber,
-            company: csvCompany || undefined,
+            partName: partNameVal,
+            otherName: otherNameVal || undefined, 
+            partNumber: partNumberVal,
+            company: companyVal || undefined,
             quantity,
-            category: csvCategory,
-            mrp: csvMrp.startsWith('$') || csvMrp.startsWith('₹') ? csvMrp : `$${csvMrp}`,
-            shelf: csvShelf || undefined,
+            category: categoryVal,
+            mrp: mrpVal.startsWith('$') || mrpVal.startsWith('₹') ? mrpVal : `$${mrpVal}`,
+            shelf: shelfVal || undefined,
           });
         }
 
         if (importedParts.length === 0 && lines.length > startIndex) {
             toast({
                 title: "No valid parts found",
-                description: "The CSV file might be empty or incorrectly formatted. Expected columns: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional).",
+                description: "The CSV file might be empty or incorrectly formatted. Expected columns in order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. Ensure all 8 columns are present.",
                 variant: "destructive",
                 duration: 7000,
             });
@@ -161,7 +161,7 @@ export default function InventoryPage() {
         console.error("Error parsing CSV:", error);
         toast({
           title: "Import Failed",
-          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional).",
+          description: "There was an error parsing the CSV file. Please ensure it's correctly formatted. Expected columns in order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. Ensure all 8 columns are present.",
           variant: "destructive",
           duration: 7000,
         });
@@ -193,19 +193,19 @@ export default function InventoryPage() {
       });
       return;
     }
-    // New CSV export order: Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name
-    const headers = ["Part Name", "Company", "Part Number", "Category", "Qty", "MRP", "Shelf", "Other Name"];
+    // CSV export order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
+    const headers = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
     const csvRows = [
       headers.join(','),
       ...mockParts.map(part => [
         `"${(part.partName || '').replace(/"/g, '""')}"`,
-        `"${(part.company || '').replace(/"/g, '""')}"`,
+        `"${(part.otherName || '').replace(/"/g, '""')}"`,
         `"${(part.partNumber || '').replace(/"/g, '""')}"`,
-        `"${(part.category || '').replace(/"/g, '""')}"`,
+        `"${(part.company || '').replace(/"/g, '""')}"`,
         part.quantity,
+        `"${(part.category || '').replace(/"/g, '""')}"`,
         `"${(part.mrp || '').replace(/"/g, '""')}"`,
         `"${(part.shelf || '').replace(/"/g, '""')}"`,
-        `"${(part.otherName || '').replace(/"/g, '""')}"`,
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -328,7 +328,8 @@ export default function InventoryPage() {
             <CardTitle>Parts List</CardTitle>
             <CardDescription>
               Browse, search, and manage your inventory parts. For CSV import, use columns in this order: 
-              Part Name, Company, Part Number, Category, Qty, MRP, Shelf, Other Name (Optional - column must exist, can be empty).
+              Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf. 
+              All 8 columns must be present, even if optional fields like 'Other Name', 'Company', or 'Shelf' are empty (use a comma as a placeholder).
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
