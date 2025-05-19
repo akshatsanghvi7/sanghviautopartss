@@ -22,7 +22,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from '@/components/ui/scroll-area';
+// Removed ScrollArea import as the form itself will handle scrolling for the main content.
+// Specific ScrollAreas can be used internally if needed (e.g., for long suggestion lists).
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -149,14 +150,14 @@ export function PurchaseFormDialog({
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
   const handleSupplierNameChange = (name: string) => {
-    setValue("supplierName", name, { shouldValidate: true }); // Update RHF state
+    setValue("supplierName", name, { shouldValidate: true });
 
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
       );
       setSupplierSuggestions(filtered);
-      setIsSupplierPopoverOpen(filtered.length > 0);
+      setIsSupplierPopoverOpen(filtered.length > 0 && document.activeElement === document.getElementById('supplierName'));
     } else {
       setSupplierSuggestions([]);
       setIsSupplierPopoverOpen(false);
@@ -293,15 +294,14 @@ export function PurchaseFormDialog({
             {initialData?.id ? 'Update the details of this purchase order.' : 'Fill in the details for the new purchase order.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex flex-col flex-grow overflow-hidden space-y-4">
-        <ScrollArea className="flex-grow pr-6"> {/* Adjusted: Removed fixed height, added flex-grow */}
-          {/* Supplier Details Section */}
-          <div className="space-y-4 p-4 border rounded-md mb-6">
+        <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
+        {/* Supplier Details Section */}
+        <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Supplier Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
+                <div className="relative">
                 <Label htmlFor="supplierName">Supplier Name *</Label>
-                 <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
+                <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
                         <Controller
                             name="supplierName"
@@ -311,8 +311,13 @@ export function PurchaseFormDialog({
                                     id="supplierName"
                                     {...field}
                                     onChange={(e) => {
-                                        field.onChange(e); // RHF update
-                                        handleSupplierNameChange(e.target.value); // Local state & suggestions update
+                                        field.onChange(e);
+                                        handleSupplierNameChange(e.target.value);
+                                    }}
+                                    onFocus={() => {
+                                       if(getValues("supplierName") && getValues("supplierName").length > 0 && supplierSuggestions.length > 0) {
+                                           setIsSupplierPopoverOpen(true);
+                                       }
                                     }}
                                     autoComplete="off"
                                 />
@@ -323,9 +328,9 @@ export function PurchaseFormDialog({
                         <PopoverContent
                             className="w-[--radix-popover-trigger-width] p-0"
                             align="start"
-                            onOpenAutoFocus={(e) => e.preventDefault()}
+                            onOpenAutoFocus={(e) => e.preventDefault()} // Prevents popover from stealing focus
                         >
-                            <div className="max-h-40 overflow-y-auto"> {/* Simple div list for suggestions */}
+                            <div className="max-h-40 overflow-y-auto">
                                 {supplierSuggestions.map((s) => (
                                 <div
                                     key={s.id}
@@ -340,26 +345,26 @@ export function PurchaseFormDialog({
                     )}
                 </Popover>
                 {errors.supplierName && <p className="text-sm text-destructive">{errors.supplierName.message}</p>}
-              </div>
-              <div>
+                </div>
+                <div>
                 <Label htmlFor="supplierContactPerson">Contact Person</Label>
                 <Input id="supplierContactPerson" {...register("supplierContactPerson")} />
-              </div>
-              <div>
+                </div>
+                <div>
                 <Label htmlFor="supplierEmail">Email</Label>
                 <Input id="supplierEmail" type="email" {...register("supplierEmail")} />
                 {errors.supplierEmail && <p className="text-sm text-destructive">{errors.supplierEmail.message}</p>}
-              </div>
-              <div>
+                </div>
+                <div>
                 <Label htmlFor="supplierPhone">Phone</Label>
                 <Input id="supplierPhone" type="tel" {...register("supplierPhone")} />
-              </div>
+                </div>
             </div>
-          </div>
+        </div>
 
-          {/* Purchase Order Details Section */}
-          <div className="space-y-4 p-4 border rounded-md mb-6">
-             <h3 className="text-md font-medium">Order Details</h3>
+        {/* Purchase Order Details Section */}
+        <div className="space-y-4 p-4 border rounded-md">
+            <h3 className="text-md font-medium">Order Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                 <Label htmlFor="supplierInvoiceNumber">Supplier Invoice No.</Label>
@@ -419,10 +424,10 @@ export function PurchaseFormDialog({
                     {errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}
                 </div>
             </div>
-          </div>
+        </div>
 
 
-          <div className="space-y-4 p-4 border rounded-md">
+        <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Purchase Items</h3>
             {errors.items && !errors.items.message && typeof errors.items === 'object' && (
                 <p className="text-sm text-destructive">Please add at least one item.</p>
@@ -511,37 +516,35 @@ export function PurchaseFormDialog({
                 </Table>
                 </div>
             )}
-          </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 border-t pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4"> {/* Removed mt-6, border-t. Spacing handled by form's space-y-6 */}
             <div>
-              <Label htmlFor="shippingCosts">Shipping Costs</Label>
-              <Input id="shippingCosts" type="number" {...register("shippingCosts")} placeholder="0.00" step="0.01" />
+                <Label htmlFor="shippingCosts">Shipping Costs</Label>
+                <Input id="shippingCosts" type="number" {...register("shippingCosts")} placeholder="0.00" step="0.01" />
             </div>
             <div>
-              <Label htmlFor="otherCharges">Other Charges</Label>
-              <Input id="otherCharges" type="number" {...register("otherCharges")} placeholder="0.00" step="0.01" />
+                <Label htmlFor="otherCharges">Other Charges</Label>
+                <Input id="otherCharges" type="number" {...register("otherCharges")} placeholder="0.00" step="0.01" />
             </div>
-             <div className="space-y-1 text-right md:col-start-3">
+            <div className="space-y-1 text-right md:col-start-3">
                 <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">${subTotal.toFixed(2)}</span></p>
                 {numericShipping > 0 && <p className="text-muted-foreground">Shipping: <span className="font-semibold text-foreground">${numericShipping.toFixed(2)}</span></p>}
                 {numericOtherCharges > 0 && <p className="text-muted-foreground">Other: <span className="font-semibold text-foreground">${numericOtherCharges.toFixed(2)}</span></p>}
                 <p className="text-xl font-bold text-foreground">Net Amount: ${netAmount.toFixed(2)}</p>
             </div>
-          </div>
-           <div className="mt-4 border-t pt-4">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" {...register("notes")} placeholder="Any specific notes for this purchase order..." />
-            </div>
-          </ScrollArea>
-
-          <DialogFooter className="pt-4 border-t bg-background pb-6 sticky bottom-0">
+        </div>
+        <div className="pt-4"> {/* Removed mt-4, border-t */}
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea id="notes" {...register("notes")} placeholder="Any specific notes for this purchase order..." />
+        </div>
+        </form>
+        <DialogFooter className="pt-4 border-t bg-background pb-4"> {/* Adjusted padding */}
             <DialogClose asChild>
                 <Button type="button" variant="outline" onClick={resetFormState}>Cancel</Button>
             </DialogClose>
-            <Button type="submit">{initialData?.id ? 'Update Purchase Order' : 'Create Purchase Order'}</Button>
-          </DialogFooter>
-        </form>
+            <Button type="submit" form="purchaseFormId">{initialData?.id ? 'Update Purchase Order' : 'Create Purchase Order'}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
