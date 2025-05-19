@@ -58,23 +58,27 @@ export default function PurchasesPage() {
     let existingSupplier: Supplier | undefined = undefined;
     let supplierUpdated = false;
     let supplierAdded = false;
+    let finalSupplierBalanceForToast: number = 0;
+
 
     if (data.supplierId) {
         existingSupplier = suppliers.find(s => s.id === data.supplierId);
     }
+    // If not found by ID, or no ID provided, try to find by name (case-insensitive, trimmed)
     if (!existingSupplier) {
         existingSupplier = suppliers.find(s => s.name.trim().toLowerCase() === formSupplierNameTrimmed.toLowerCase());
     }
 
     if (existingSupplier) {
         supplierIdToUse = existingSupplier.id;
-        nameForPurchaseRecord = formSupplierNameTrimmed; 
+        nameForPurchaseRecord = formSupplierNameTrimmed; // Use the name from the form for the PO record
 
         const updatedSupplierData: Partial<Supplier> = {};
         let detailsChanged = false;
 
-        if (existingSupplier.name.trim() !== formSupplierNameTrimmed) {
-            updatedSupplierData.name = formSupplierNameTrimmed;
+        // Check if name from form (trimmed) is different from existing name (trimmed)
+        if (existingSupplier.name.trim().toLowerCase() !== formSupplierNameTrimmed.toLowerCase()) {
+            updatedSupplierData.name = formSupplierNameTrimmed; // Update with form's version of name
             detailsChanged = true;
         }
         if ((data.supplierContactPerson || "") !== (existingSupplier.contactPerson || "")) {
@@ -90,47 +94,55 @@ export default function PurchasesPage() {
             detailsChanged = true;
         }
         
-        let newBalance = existingSupplier.balance;
+        let newBalance = typeof existingSupplier.balance === 'number' ? existingSupplier.balance : 0;
         if (data.paymentType === 'on_credit') {
-            newBalance = (existingSupplier.balance || 0) + (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0));
-            if (newBalance !== existingSupplier.balance) {
-                updatedSupplierData.balance = newBalance;
-                detailsChanged = true;
-            }
+            newBalance += (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0));
         }
         
+        if (newBalance !== (typeof existingSupplier.balance === 'number' ? existingSupplier.balance : 0)) {
+            updatedSupplierData.balance = newBalance; // This will always be a number
+            detailsChanged = true;
+        } else if (!('balance' in updatedSupplierData) && typeof existingSupplier.balance !== 'number') {
+            // Ensure balance is numeric even if it didn't change value but was a string
+            updatedSupplierData.balance = newBalance;
+        }
+        
+        finalSupplierBalanceForToast = newBalance;
+
         if (detailsChanged) {
             setSuppliers(prevSuppliers => prevSuppliers.map(s =>
                 s.id === existingSupplier!.id
-                ? { ...s, ...updatedSupplierData, balance: newBalance } // ensure balance always reflects latest
+                ? { ...s, ...updatedSupplierData, name: updatedSupplierData.name || s.name, balance: newBalance } // Ensure balance always reflects latest
                 : s
             ));
             supplierUpdated = true;
         }
-    } else {
+    } else { // New supplier
+        const newSupplierNumericBalance = data.paymentType === 'on_credit' ? (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0)) : 0;
         const newSupplierData: Supplier = {
             id: `SUP${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2,3).toUpperCase()}`,
             name: formSupplierNameTrimmed,
             contactPerson: data.supplierContactPerson,
             email: data.supplierEmail,
             phone: data.supplierPhone,
-            balance: data.paymentType === 'on_credit' ? (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0)) : 0,
+            balance: newSupplierNumericBalance, // Numeric balance
         };
         setSuppliers(prevSuppliers => [newSupplierData, ...prevSuppliers]);
         supplierIdToUse = newSupplierData.id;
         nameForPurchaseRecord = formSupplierNameTrimmed;
+        finalSupplierBalanceForToast = newSupplierNumericBalance;
         supplierAdded = true;
     }
 
     if (supplierAdded) {
         toast({
             title: "New Supplier Added",
-            description: `${formSupplierNameTrimmed} has been added to suppliers list. Balance: $${(suppliers.find(s => s.id === supplierIdToUse)?.balance || 0).toFixed(2)}`,
+            description: `${formSupplierNameTrimmed} has been added to suppliers list. Balance: $${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     } else if (supplierUpdated) {
          toast({
             title: "Supplier Updated",
-            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance: $${(suppliers.find(s => s.id === supplierIdToUse)?.balance || 0).toFixed(2)}`,
+            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance: $${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     }
 
