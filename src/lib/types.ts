@@ -66,6 +66,7 @@ export type Purchase = {
   paymentType: 'cash' | 'bank_transfer' | 'on_credit' | 'cheque';
   status: 'Pending' | 'Ordered' | 'Partially Received' | 'Received' | 'Cancelled';
   notes?: string; // Optional field for any notes
+  paymentSettled?: boolean; // Tracks if an 'on_credit' purchase has been paid. Defaults to false.
 };
 
 

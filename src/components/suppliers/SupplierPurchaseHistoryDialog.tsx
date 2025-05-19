@@ -58,11 +58,14 @@ export function SupplierPurchaseHistoryDialog({
     }
   };
 
-  const getPaymentStatus = (paymentType: Purchase['paymentType']): { text: string; className: string } => {
-    if (paymentType === 'on_credit') {
-      return { text: 'Due', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' };
+  const getPaymentDisplayStatus = (purchase: Purchase): { text: string; className: string } => {
+    if (purchase.paymentType === 'on_credit') {
+      return purchase.paymentSettled 
+        ? { text: 'Paid', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' }
+        : { text: 'Due', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' };
     }
-    return { text: 'Paid', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
+    // For non-credit purchases, assume paid upfront
+    return { text: 'Paid (Upfront)', className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
   };
 
   return (
@@ -71,7 +74,7 @@ export function SupplierPurchaseHistoryDialog({
         <DialogHeader>
           <DialogTitle>Purchase History for {supplier.name}</DialogTitle>
           <DialogDescription>
-            Review all purchase orders associated with this supplier. Balances owed are updated based on 'On Credit' purchases.
+            Review all purchase orders associated with this supplier.
           </DialogDescription>
         </DialogHeader>
 
@@ -89,7 +92,7 @@ export function SupplierPurchaseHistoryDialog({
               </TableHeader>
               <TableBody>
                 {supplierPurchases.map((purchase) => {
-                  const paymentStatus = getPaymentStatus(purchase.paymentType);
+                  const paymentStatus = getPaymentDisplayStatus(purchase);
                   return (
                     <TableRow key={purchase.id}>
                       <TableCell className="font-medium">{purchase.id}</TableCell>

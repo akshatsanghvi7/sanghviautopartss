@@ -148,6 +148,7 @@ export function PurchaseFormDialog({
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
   const handleSupplierNameChange = (name: string) => {
+    setValue('supplierName', name, { shouldValidate: true }); // Keep RHF in sync
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
@@ -296,7 +297,7 @@ export function PurchaseFormDialog({
                 <Label htmlFor="supplierNameInput">Supplier Name *</Label>
                 <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
-                         <Controller
+                        <Controller
                             name="supplierName"
                             control={control}
                             render={({ field }) => (
@@ -304,8 +305,8 @@ export function PurchaseFormDialog({
                                     id="supplierNameInput"
                                     {...field}
                                     onChange={(e) => {
-                                        field.onChange(e); 
-                                        handleSupplierNameChange(e.target.value); 
+                                        field.onChange(e);
+                                        handleSupplierNameChange(e.target.value);
                                     }}
                                     onFocus={() => {
                                         const currentValue = getValues('supplierName');
@@ -445,27 +446,29 @@ export function PurchaseFormDialog({
                 </div>
             
                 {/* Conditional rendering block for suggestions OR "not found" message */}
-                {partSearchTerm && (
-                    filteredInventoryParts.length > 0 ? (
-                        <div className="bg-background border mt-1 rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
-                            {filteredInventoryParts.map(part => (
-                                <div
-                                    key={part.partNumber}
-                                    className="p-2 hover:bg-accent cursor-pointer text-sm"
-                                    onClick={() => selectPartFromSearch(part)}
-                                >
-                                    {part.partName} ({part.partNumber}) - Stock: {part.quantity}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                         partSearchTerm.length > 0 && !selectedPartForAdding && ( 
-                            <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
-                                Part not found: "{partSearchTerm}". Please add new parts via the Inventory page.
+                <div className="mt-1"> {/* Wrapper to ensure block flow */}
+                    {partSearchTerm && (
+                        filteredInventoryParts.length > 0 ? (
+                            <div className="bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
+                                {filteredInventoryParts.map(part => (
+                                    <div
+                                        key={part.partNumber}
+                                        className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                        onClick={() => selectPartFromSearch(part)}
+                                    >
+                                        {part.partName} ({part.partNumber}) - Stock: {part.quantity}
+                                    </div>
+                                ))}
                             </div>
+                        ) : (
+                            partSearchTerm.length > 0 && !selectedPartForAdding && ( 
+                                <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
+                                    Part not found: "{partSearchTerm}". Please add new parts via the Inventory page.
+                                </div>
+                            )
                         )
-                    )
-                )}
+                    )}
+                </div>
 
                 {selectedPartForAdding && (
                     <p className="text-sm text-muted-foreground mt-1">
