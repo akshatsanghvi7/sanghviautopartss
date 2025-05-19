@@ -18,17 +18,30 @@ export type Part = {
   sellingPrice?: number; // This could be the same as MRP or different
   mrp: string; // Renamed from price, and as per user request
   shelf?: string;
-  supplierId?: string; 
+  supplierId?: string;
+};
+
+export type SaleItem = {
+  partNumber: string;
+  partName: string;
+  quantitySold: number;
+  unitPrice: number; // Price at the time of sale
+  itemTotal: number; // quantitySold * unitPrice
 };
 
 export type Sale = {
-  id: string;
+  id: string; // Unique sale identifier (e.g., timestamp or UUID)
   date: string; // ISO string
-  items: { partId: string; quantitySold: number; unitPrice: number }[];
-  totalAmount: number;
+  buyerName: string;
+  gstNumber?: string;
+  contactDetails?: string;
+  emailAddress?: string;
+  items: SaleItem[];
+  subTotal: number; // Sum of all itemTotals
+  discount?: number; // Discount amount
+  netAmount: number; // subTotal - discount
   paymentType: 'cash' | 'credit';
-  customerId?: string; // if credit
-  // billSent?: boolean;
+  // billSent?: boolean; // Could be added later
 };
 
 export type Purchase = {
@@ -53,3 +66,4 @@ export type Supplier = {
   contactInfo?: string;
   balanceOwed: number;
 };
+

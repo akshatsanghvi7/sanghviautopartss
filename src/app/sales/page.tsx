@@ -15,44 +15,101 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useToast } from "@/hooks/use-toast"; // Added
-import React, { useState } from 'react'; // Added for potential future state
+import { useToast } from "@/hooks/use-toast";
+import React, { useState, useEffect } from 'react';
+import useLocalStorage from '@/hooks/useLocalStorage';
+import type { Sale, Part, SaleItem } from '@/lib/types';
+import { SaleFormDialog, type SaleFormData } from '@/components/sales/SaleFormDialog';
+import { InvoiceViewDialog } from '@/components/sales/InvoiceViewDialog';
+import { format } from 'date-fns';
 
-// Mock data for demonstration
-const mockSales = [
-  { id: 'S001', date: '2024-07-15', customer: 'John Doe', total: '$150.75', status: 'Paid' },
-  { id: 'S002', date: '2024-07-14', customer: 'Jane Smith', total: '$88.00', status: 'Pending' },
-  { id: 'S003', date: '2024-07-14', customer: 'Bob Johnson', total: '$230.50', status: 'Paid' },
-  { id: 'S004', date: '2024-07-13', customer: 'Alice Brown', total: '$45.20', status: 'Paid (Credit)' },
-  { id: 'S005', date: '2024-07-12', customer: 'Mike Davis', total: '$199.99', status: 'Overdue' },
+// Initial mock sales data if localStorage is empty
+const initialMockSales: Sale[] = [
+  { id: 'S001', date: new Date('2024-07-15T10:00:00Z').toISOString(), buyerName: 'John Doe', items: [{ partNumber: 'P001', partName: 'Spark Plug', quantitySold: 2, unitPrice: 5.99, itemTotal: 11.98 }], subTotal: 11.98, netAmount: 11.98, paymentType: 'cash', gstNumber: 'GST123', contactDetails: '555-1234', emailAddress: 'john@example.com' },
+  { id: 'S002', date: new Date('2024-07-14T11:30:00Z').toISOString(), buyerName: 'Jane Smith', items: [{ partNumber: 'P002', partName: 'Oil Filter', quantitySold: 1, unitPrice: 12.50, itemTotal: 12.50 }], subTotal: 12.50, netAmount: 12.50, paymentType: 'credit', discount: 0 },
 ];
 
 
 export default function SalesPage() {
-  const { toast } = useToast(); // Added
-  const [searchTerm, setSearchTerm] = useState(''); // Added for search functionality
-  // Add state for filters if needed, e.g.
-  // const [statusFilters, setStatusFilters] = useState({ paid: true, pending: false, overdue: false });
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sales, setSales] = useLocalStorage<Sale[]>('autocentral-sales', initialMockSales);
+  const [inventoryParts, setInventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []);
 
-  const handleNewSaleClick = () => {
-    toast({
-      title: "Feature Coming Soon",
-      description: "Ability to create new sales will be added shortly.",
+  const [isSaleFormOpen, setIsSaleFormOpen] = useState(false);
+  const [isInvoiceViewOpen, setIsInvoiceViewOpen] = useState(false);
+  const [selectedSaleForInvoice, setSelectedSaleForInvoice] = useState<Sale | null>(null);
+
+  // Status filter states (example, can be expanded)
+  const [statusFilters, setStatusFilters] = useState({
+    paid: true, // Assuming 'cash' and 'credit' initially mean paid for simplicity
+    pending: false, // If you add other statuses
+    overdue: false, // If you add other statuses
+  });
+
+
+  const handleNewSaleSubmit = (data: SaleFormData) => {
+    const newSale: Sale = {
+      id: `S${Date.now().toString().slice(-4)}${Math.random().toString(36).substr(2, 2).toUpperCase()}`, // More unique ID
+      date: data.saleDate.toISOString(),
+      buyerName: data.buyerName,
+      gstNumber: data.gstNumber,
+      contactDetails: data.contactDetails,
+      emailAddress: data.emailAddress,
+      items: data.items.map(item => ({
+        partNumber: item.partNumber,
+        partName: item.partName, // Ensure partName is populated during item selection
+        quantitySold: item.quantity,
+        unitPrice: item.unitPrice,
+        itemTotal: item.quantity * item.unitPrice,
+      })),
+      subTotal: data.items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0),
+      discount: data.discount,
+      netAmount: data.items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0) - (data.discount || 0),
+      paymentType: data.paymentType,
+    };
+
+    // Update inventory
+    const updatedInventory = inventoryParts.map(part => {
+      const soldItem = newSale.items.find(item => item.partNumber === part.partNumber);
+      if (soldItem) {
+        return { ...part, quantity: part.quantity - soldItem.quantitySold };
+      }
+      return part;
     });
+    setInventoryParts(updatedInventory);
+
+    setSales(prevSales => [newSale, ...prevSales]);
+    toast({
+      title: "Sale Recorded",
+      description: `Sale ID ${newSale.id} for ${newSale.buyerName} has been recorded.`,
+    });
+    setIsSaleFormOpen(false);
   };
 
-  const handleViewBillClick = (saleId: string) => {
-    toast({
-      title: "Feature Coming Soon",
-      description: `Viewing bill for Sale ID: ${saleId} is not yet implemented.`,
-    });
+  const handleViewBillClick = (sale: Sale) => {
+    setSelectedSaleForInvoice(sale);
+    setIsInvoiceViewOpen(true);
+    if (sale.emailAddress) {
+        // Simulate mailing
+        toast({
+            title: "Invoice Mailed (Simulated)",
+            description: `Invoice for Sale ID: ${sale.id} would be mailed to ${sale.emailAddress}.`
+        })
+    }
   };
 
-  const filteredSales = mockSales.filter(sale => 
-    sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sale.customer.toLowerCase().includes(searchTerm.toLowerCase())
-    // Add status filtering logic here if statusFilters state is used
+  const filteredSales = sales.filter(sale =>
+    (sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sale.buyerName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    // Basic status filtering logic (can be expanded)
+    ( (statusFilters.paid && (sale.paymentType === 'cash' || sale.paymentType === 'credit')) ) // Simplified for now
+    // Add more conditions if other statuses like pending/overdue are implemented
   );
+
+  const handleStatusFilterChange = (statusKey: keyof typeof statusFilters, checked: boolean) => {
+    setStatusFilters(prev => ({ ...prev, [statusKey]: checked }));
+  };
 
 
   return (
@@ -63,7 +120,7 @@ export default function SalesPage() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Sales Management</h1>
             <p className="text-muted-foreground">Track and manage your sales transactions.</p>
           </div>
-          <Button onClick={handleNewSaleClick}> {/* Updated */}
+          <Button onClick={() => setIsSaleFormOpen(true)}>
             <PlusCircle className="mr-2 h-4 w-4" /> New Sale
           </Button>
         </div>
@@ -75,9 +132,9 @@ export default function SalesPage() {
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search by sale ID or customer..." 
-                  className="pl-10 w-full" 
+                <Input
+                  placeholder="Search by sale ID or customer..."
+                  className="pl-10 w-full"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -92,10 +149,26 @@ export default function SalesPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {/* Example: Update these based on statusFilters state and add onCheckedChange handlers */}
-                  <DropdownMenuCheckboxItem checked>Paid</DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem>Pending</DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem>Overdue</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={statusFilters.paid}
+                    onCheckedChange={(checked) => handleStatusFilterChange('paid', Boolean(checked))}
+                  >
+                    Paid/Completed
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                     checked={statusFilters.pending}
+                     onCheckedChange={(checked) => handleStatusFilterChange('pending', Boolean(checked))}
+                     disabled // Example: enable when pending status is implemented
+                  >
+                    Pending
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={statusFilters.overdue}
+                    onCheckedChange={(checked) => handleStatusFilterChange('overdue', Boolean(checked))}
+                    disabled // Example: enable when overdue status is implemented
+                  >
+                    Overdue
+                  </DropdownMenuCheckboxItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -107,8 +180,8 @@ export default function SalesPage() {
                   <TableHead>Sale ID</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Net Amount</TableHead>
+                  <TableHead>Payment</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -116,20 +189,20 @@ export default function SalesPage() {
                 {filteredSales.map((sale) => (
                   <TableRow key={sale.id}>
                     <TableCell className="font-medium">{sale.id}</TableCell>
-                    <TableCell>{sale.date}</TableCell>
-                    <TableCell>{sale.customer}</TableCell>
-                    <TableCell className="text-right">{sale.total}</TableCell>
+                    <TableCell>{format(new Date(sale.date), "PPp")}</TableCell>
+                    <TableCell>{sale.buyerName}</TableCell>
+                    <TableCell className="text-right">${sale.netAmount.toFixed(2)}</TableCell>
                     <TableCell>
                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        sale.status.startsWith('Paid') ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        sale.status === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' // Overdue
+                        sale.paymentType === 'cash' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                        sale.paymentType === 'credit' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' // Default/other
                       }`}>
-                        {sale.status}
+                        {sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewBillClick(sale.id)}> {/* Updated */}
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewBillClick(sale)}>
                         <FileText className="h-4 w-4" />
                          <span className="sr-only">View Bill</span>
                       </Button>
@@ -140,12 +213,25 @@ export default function SalesPage() {
             </Table>
             {filteredSales.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    {mockSales.length > 0 && searchTerm ? 'No sales match your search.' : 'No sales recorded yet. Create a new sale to get started.'}
+                    {sales.length > 0 && searchTerm ? 'No sales match your search.' : 'No sales recorded yet. Create a new sale to get started.'}
                 </div>
             )}
           </CardContent>
         </Card>
       </div>
+      <SaleFormDialog
+        isOpen={isSaleFormOpen}
+        onOpenChange={setIsSaleFormOpen}
+        onSubmit={handleNewSaleSubmit}
+        inventoryParts={inventoryParts}
+      />
+      {selectedSaleForInvoice && (
+        <InvoiceViewDialog
+            isOpen={isInvoiceViewOpen}
+            onOpenChange={setIsInvoiceViewOpen}
+            sale={selectedSaleForInvoice}
+        />
+      )}
     </AppLayout>
   );
 }
