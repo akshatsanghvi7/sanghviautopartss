@@ -44,14 +44,29 @@ export type Sale = {
   // billSent?: boolean; // Could be added later
 };
 
-export type Purchase = {
-  id: string;
-  date: string; // ISO string
-  items: { partId: string; quantityPurchased: number; unitCost: number }[];
-  totalAmount: number;
-  supplierId: string;
-  // paymentStatus?: 'paid' | 'pending';
+export type PurchaseItem = {
+  partNumber: string;
+  partName: string; // For display on PO, fetched from inventory
+  quantityPurchased: number;
+  unitCost: number; // Cost for this specific purchase transaction
+  itemTotal: number; // quantityPurchased * unitCost
 };
+
+export type Purchase = {
+  id: string; // Unique PO identifier
+  date: string; // ISO string for purchase date
+  supplierName: string;
+  supplierInvoiceNumber?: string; // Optional
+  items: PurchaseItem[];
+  subTotal: number; // Sum of all PurchaseItem.itemTotal
+  shippingCosts?: number;
+  otherCharges?: number;
+  netAmount: number; // subTotal + shippingCosts + otherCharges
+  paymentType: 'cash' | 'bank_transfer' | 'credit_card' | 'cheque';
+  status: 'Pending' | 'Ordered' | 'Partially Received' | 'Received' | 'Cancelled';
+  notes?: string; // Optional field for any notes
+};
+
 
 export type Customer = {
   id: string;
@@ -66,4 +81,3 @@ export type Supplier = {
   contactInfo?: string;
   balanceOwed: number;
 };
-
