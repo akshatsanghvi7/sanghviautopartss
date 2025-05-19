@@ -26,7 +26,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils'; // Ensure cn is imported if used in Command
+import { cn } from '@/lib/utils';
 
 const purchaseItemSchema = z.object({
   partNumber: z.string().min(1, "Part Number is required"),
@@ -36,7 +36,7 @@ const purchaseItemSchema = z.object({
 });
 
 const purchaseFormSchema = z.object({
-  supplierId: z.string().optional(), // To store ID of existing supplier
+  supplierId: z.string().optional(),
   supplierName: z.string().min(1, "Supplier Name is required"),
   supplierContactPerson: z.string().optional(),
   supplierEmail: z.string().email("Invalid email address").optional().or(z.literal('')),
@@ -59,7 +59,7 @@ interface PurchaseFormDialogProps {
   onSubmit: (data: PurchaseFormData) => void;
   inventoryParts: Part[];
   inventorySuppliers: Supplier[];
-  initialData?: PurchaseFormData & { id?: string }; // Optional initialData for editing in future
+  initialData?: PurchaseFormData & { id?: string };
 }
 
 export function PurchaseFormDialog({
@@ -68,7 +68,7 @@ export function PurchaseFormDialog({
   onSubmit,
   inventoryParts,
   inventorySuppliers,
-  initialData, // Added initialData for potential future edit functionality
+  initialData,
 }: PurchaseFormDialogProps) {
   const { toast } = useToast();
   const {
@@ -82,7 +82,7 @@ export function PurchaseFormDialog({
     formState: { errors },
   } = useForm<PurchaseFormData>({
     resolver: zodResolver(purchaseFormSchema),
-    defaultValues: initialData || { // Use initialData if provided, else default
+    defaultValues: initialData || {
       purchaseDate: undefined,
       items: [],
       shippingCosts: 0,
@@ -108,13 +108,12 @@ export function PurchaseFormDialog({
   const [currentUnitCostInput, setCurrentUnitCostInput] = useState<number | string>(0);
   const [selectedPartForAdding, setSelectedPartForAdding] = useState<Part | null>(null);
 
-  const [supplierNameInput, setSupplierNameInput] = useState(initialData?.supplierName || '');
   const [supplierSuggestions, setSupplierSuggestions] = useState<Supplier[]>([]);
   const [isSupplierPopoverOpen, setIsSupplierPopoverOpen] = useState(false);
 
 
   const resetFormState = useCallback(() => {
-    reset(initialData || { // Reset to initialData if in edit mode, else default new form state
+    reset(initialData || {
       purchaseDate: new Date(),
       items: [],
       shippingCosts: 0,
@@ -133,17 +132,15 @@ export function PurchaseFormDialog({
     setCurrentQuantityInput(1);
     setCurrentUnitCostInput(0);
     setSelectedPartForAdding(null);
-    setSupplierNameInput(initialData?.supplierName || '');
     setSupplierSuggestions([]);
     setIsSupplierPopoverOpen(false);
   }, [reset, initialData]);
 
   useEffect(() => {
     if (isOpen) {
-      if (initialData) { // If editing, populate form with initialData
+      if (initialData) {
         reset(initialData);
-        setSupplierNameInput(initialData.supplierName || '');
-      } else if (!getValues('purchaseDate')) { // New PO, set date if not already set
+      } else if (!getValues('purchaseDate')) {
         setValue('purchaseDate', new Date());
       }
     } else {
@@ -151,10 +148,8 @@ export function PurchaseFormDialog({
     }
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
-  const handleSupplierNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
-    setSupplierNameInput(name);
-    setValue("supplierName", name, { shouldValidate: true });
+  const handleSupplierNameChange = (name: string) => {
+    setValue("supplierName", name, { shouldValidate: true }); // Update RHF state
 
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
@@ -165,7 +160,7 @@ export function PurchaseFormDialog({
     } else {
       setSupplierSuggestions([]);
       setIsSupplierPopoverOpen(false);
-      if (!initialData?.id) { // Only clear if not in edit mode for a specific supplier
+      if (!initialData?.id) {
           setValue("supplierId", undefined);
           setValue("supplierContactPerson", "");
           setValue("supplierEmail", "");
@@ -177,14 +172,15 @@ export function PurchaseFormDialog({
   const handleSupplierSelect = (supplier: Supplier) => {
     setValue("supplierId", supplier.id);
     setValue("supplierName", supplier.name);
-    setSupplierNameInput(supplier.name);
     setValue("supplierContactPerson", supplier.contactPerson || "");
     setValue("supplierEmail", supplier.email || "");
     setValue("supplierPhone", supplier.phone || "");
     setSupplierSuggestions([]);
     setIsSupplierPopoverOpen(false);
-    // Optionally focus next field
-    document.getElementById('supplierContactPerson')?.focus();
+    const contactPersonInput = document.getElementById('supplierContactPerson');
+    if (contactPersonInput) {
+        contactPersonInput.focus();
+    }
   };
 
 
@@ -290,15 +286,15 @@ export function PurchaseFormDialog({
       if (!open) resetFormState();
       onOpenChange(open);
     }}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>{initialData?.id ? 'Edit Purchase Order' : 'Create New Purchase Order'}</DialogTitle>
           <DialogDescription>
             {initialData?.id ? 'Update the details of this purchase order.' : 'Fill in the details for the new purchase order.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="space-y-4">
-        <ScrollArea className="h-[60vh] pr-6"> {/* Reduced height from 70vh to 60vh */}
+        <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex flex-col flex-grow overflow-hidden space-y-4">
+        <ScrollArea className="flex-grow pr-6"> {/* Adjusted: Removed fixed height, added flex-grow */}
           {/* Supplier Details Section */}
           <div className="space-y-4 p-4 border rounded-md mb-6">
             <h3 className="text-md font-medium">Supplier Information</h3>
@@ -307,20 +303,29 @@ export function PurchaseFormDialog({
                 <Label htmlFor="supplierName">Supplier Name *</Label>
                  <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Input
-                            id="supplierName"
-                            value={supplierNameInput}
-                            onChange={handleSupplierNameChange}
-                            autoComplete="off"
+                        <Controller
+                            name="supplierName"
+                            control={control}
+                            render={({ field }) => (
+                                <Input
+                                    id="supplierName"
+                                    {...field}
+                                    onChange={(e) => {
+                                        field.onChange(e); // RHF update
+                                        handleSupplierNameChange(e.target.value); // Local state & suggestions update
+                                    }}
+                                    autoComplete="off"
+                                />
+                            )}
                         />
                     </PopoverTrigger>
                     {supplierSuggestions.length > 0 && (
                         <PopoverContent
                             className="w-[--radix-popover-trigger-width] p-0"
                             align="start"
-                            onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus steal
+                            onOpenAutoFocus={(e) => e.preventDefault()}
                         >
-                             <Command> {/* This is a custom simple Command, not cmdk */}
+                            <div className="max-h-40 overflow-y-auto"> {/* Simple div list for suggestions */}
                                 {supplierSuggestions.map((s) => (
                                 <div
                                     key={s.id}
@@ -330,7 +335,7 @@ export function PurchaseFormDialog({
                                     {s.name}
                                 </div>
                                 ))}
-                            </Command>
+                            </div>
                         </PopoverContent>
                     )}
                 </Popover>
@@ -530,9 +535,9 @@ export function PurchaseFormDialog({
             </div>
           </ScrollArea>
 
-          <DialogFooter className="pt-4 border-t sticky bottom-0 bg-background pb-6">
+          <DialogFooter className="pt-4 border-t bg-background pb-6 sticky bottom-0">
             <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
+                <Button type="button" variant="outline" onClick={resetFormState}>Cancel</Button>
             </DialogClose>
             <Button type="submit">{initialData?.id ? 'Update Purchase Order' : 'Create Purchase Order'}</Button>
           </DialogFooter>
@@ -541,20 +546,5 @@ export function PurchaseFormDialog({
     </Dialog>
   );
 }
-
-// Minimal Command component structure for Popover content, if not already globally available
-// This is a simplified version for the popover suggestion list.
-const Command = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground", className)}
-    {...props}
-  />
-));
-Command.displayName = "Command";
-
 
     
