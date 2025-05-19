@@ -177,8 +177,19 @@ export function SaleFormDialog({
 
   const watchedItems = watch("items");
   const subTotal = watchedItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-  const discount = watch("discount") || 0;
-  const netAmount = subTotal - discount;
+  
+  const watchedDiscountValue = watch("discount"); // This can be string, number, or undefined
+  let numericDiscount = 0;
+  if (typeof watchedDiscountValue === 'number') {
+    numericDiscount = isNaN(watchedDiscountValue) ? 0 : watchedDiscountValue;
+  } else if (typeof watchedDiscountValue === 'string' && watchedDiscountValue.trim() !== '') {
+    const parsed = parseFloat(watchedDiscountValue);
+    numericDiscount = isNaN(parsed) ? 0 : parsed;
+  }
+  // Ensure discount is not negative, consistent with schema min(0)
+  numericDiscount = Math.max(0, numericDiscount);
+
+  const netAmount = subTotal - numericDiscount;
 
   const filteredInventoryParts = inventoryParts.filter(part =>
     part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
@@ -190,7 +201,12 @@ export function SaleFormDialog({
       toast({ title: "Sale Date Missing", description: "Please select a sale date.", variant: "destructive" });
       return;
     }
-    onSubmit(data as SaleFormData & { saleDate: Date }); // Ensure saleDate is a Date for the parent
+    // Ensure discount is a number in the submitted data
+    const submissionData = {
+      ...data,
+      discount: numericDiscount,
+    };
+    onSubmit(submissionData as SaleFormData & { saleDate: Date }); // Ensure saleDate is a Date for the parent
   };
 
   return (
@@ -352,12 +368,12 @@ export function SaleFormDialog({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 border-t pt-4">
             <div className="md:col-start-2">
               <Label htmlFor="discount">Discount ($)</Label>
-              <Input id="discount" type="number" {...register("discount")} placeholder="0.00" />
+              <Input id="discount" type="number" {...register("discount")} placeholder="0.00" step="0.01" />
               {errors.discount && <p className="text-sm text-destructive">{errors.discount.message}</p>}
             </div>
             <div className="space-y-1 text-right">
                 <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">${subTotal.toFixed(2)}</span></p>
-                {discount > 0 && <p className="text-muted-foreground">Discount: <span className="font-semibold text-foreground">-${discount.toFixed(2)}</span></p>}
+                {numericDiscount > 0 && <p className="text-muted-foreground">Discount: <span className="font-semibold text-foreground">-${numericDiscount.toFixed(2)}</span></p>}
                 <p className="text-xl font-bold text-foreground">Net Amount: ${netAmount.toFixed(2)}</p>
             </div>
           </div>
@@ -374,3 +390,4 @@ export function SaleFormDialog({
     </Dialog>
   );
 }
+
