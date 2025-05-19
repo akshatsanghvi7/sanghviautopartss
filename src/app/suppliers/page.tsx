@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Search, Edit2, Trash2, Mail, Phone, Download, History } from 'lucide-react';
+import { PlusCircle, Search, Edit2, Trash2, Mail, Phone, Download, History, Coins } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Supplier, Purchase } from '@/lib/types';
@@ -13,6 +13,7 @@ import React, { useState, useMemo } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { SupplierPurchaseHistoryDialog } from '@/components/suppliers/SupplierPurchaseHistoryDialog';
+import { AdjustSupplierBalanceDialog } from '@/components/suppliers/AdjustSupplierBalanceDialog';
 
 // Initial mock data if localStorage is empty
 const initialMockSuppliers: Supplier[] = [
@@ -32,26 +33,25 @@ export default function SuppliersPage() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
 
+  const [isAdjustBalanceDialogOpen, setIsAdjustBalanceDialogOpen] = useState(false);
+  const [selectedSupplierForBalance, setSelectedSupplierForBalance] = useState<Supplier | null>(null);
+
+
   const uniqueSuppliers = useMemo(() => {
     const seenIds = new Set<string>();
-    // First, process suppliers to ensure balance is a number
     const processedSuppliers = suppliers.map(s => {
       let numericBalance = 0;
       if (typeof s.balance === 'number') {
         numericBalance = s.balance;
       } else if (typeof s.balance === 'string') {
-        // Attempt to parse the string, removing currency symbols etc.
         const parsed = parseFloat(String(s.balance).replace(/[^0-9.-]+/g,""));
         numericBalance = isNaN(parsed) ? 0 : parsed;
       } else if (s.balance === undefined || s.balance === null) {
-        // Handles cases where balance might be undefined or null from old data
         numericBalance = 0;
       }
-      // Return a new object with the normalized balance
       return { ...s, balance: numericBalance };
     });
 
-    // Then, filter for uniqueness by ID
     return processedSuppliers.filter(supplier => {
       if (!supplier || !supplier.id) return false; 
       if (seenIds.has(supplier.id)) {
@@ -73,7 +73,7 @@ export default function SuppliersPage() {
   };
 
   const handleEditSupplier = (supplierId: string) => {
-    toast({ title: "Feature Coming Soon", description: `Editing supplier ${supplierId} will be implemented to correct details like phone/email or update contact information directly.` });
+    toast({ title: "Feature Coming Soon", description: `Editing supplier ${supplierId} will allow correcting details like phone/email or updating contact information directly.` });
   };
 
   const handleDeleteSupplier = (supplierId: string) => {
@@ -83,6 +83,24 @@ export default function SuppliersPage() {
   const handleViewHistory = (supplier: Supplier) => {
     setSelectedSupplierForHistory(supplier);
     setIsHistoryDialogOpen(true);
+  };
+
+  const handleOpenAdjustBalanceDialog = (supplier: Supplier) => {
+    setSelectedSupplierForBalance(supplier);
+    setIsAdjustBalanceDialogOpen(true);
+  };
+
+  const handleUpdateSupplierBalance = (supplierId: string, newBalance: number) => {
+    setSuppliers(prevSuppliers =>
+      prevSuppliers.map(s =>
+        s.id === supplierId ? { ...s, balance: newBalance } : s
+      )
+    );
+    const supplierName = suppliers.find(s => s.id === supplierId)?.name || 'Supplier';
+    toast({
+      title: "Balance Updated",
+      description: `Balance for ${supplierName} has been updated to $${newBalance.toFixed(2)}.`,
+    });
   };
 
   const handleExportToExcel = () => {
@@ -133,7 +151,7 @@ export default function SuppliersPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Supplier Management</h1>
-            <p className="text-muted-foreground">Manage your supplier information. Balances represent amount owed from 'On Credit' purchases and are updated automatically.</p>
+            <p className="text-muted-foreground">Manage your supplier information. Balances represent amount owed from 'On Credit' purchases and are updated automatically. You can also manually adjust balances.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleExportToExcel}>
@@ -150,7 +168,7 @@ export default function SuppliersPage() {
             <CardTitle>Supplier List</CardTitle>
             <CardDescription>
               Browse, search, and manage your suppliers. New suppliers are automatically added from purchases, and details/balances are updated.
-              If you see issues like phone numbers in email fields, this may indicate a data entry error during purchase.
+              If you see issues like phone numbers in email fields, this may indicate a data entry error during purchase. Balances are not automatically cleared by payments in this version.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -189,15 +207,19 @@ export default function SuppliersPage() {
                     </TableCell>
                     <TableCell className="text-right">${(typeof supplier.balance === 'number' ? supplier.balance : 0).toFixed(2)}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)}>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)} title="View Purchase History">
                         <History className="h-4 w-4" />
                         <span className="sr-only">View Purchase History</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditSupplier(supplier.id)}>
+                       <Button variant="ghost" size="icon" className="hover:text-amber-600" onClick={() => handleOpenAdjustBalanceDialog(supplier)} title="Adjust Balance">
+                        <Coins className="h-4 w-4" />
+                        <span className="sr-only">Adjust Balance</span>
+                      </Button>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditSupplier(supplier.id)} title="Edit Supplier">
                         <Edit2 className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteSupplier(supplier.id)}>
+                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteSupplier(supplier.id)} title="Delete Supplier">
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>
@@ -220,6 +242,14 @@ export default function SuppliersPage() {
             onOpenChange={setIsHistoryDialogOpen}
             supplier={selectedSupplierForHistory}
             allPurchases={purchases}
+        />
+      )}
+      {selectedSupplierForBalance && (
+        <AdjustSupplierBalanceDialog
+          isOpen={isAdjustBalanceDialogOpen}
+          onOpenChange={setIsAdjustBalanceDialogOpen}
+          supplier={selectedSupplierForBalance}
+          onSubmit={handleUpdateSupplierBalance}
         />
       )}
     </AppLayout>
