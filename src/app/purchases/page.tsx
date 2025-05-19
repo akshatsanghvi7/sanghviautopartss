@@ -15,14 +15,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Purchase, Part, Supplier } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
 import { format } from 'date-fns';
 
-const initialMockPurchases: Purchase[] = []; // Start with empty, will be loaded from localStorage
+const initialMockPurchases: Purchase[] = []; 
 
 export default function PurchasesPage() {
   const { toast } = useToast();
@@ -44,10 +45,70 @@ export default function PurchasesPage() {
 
 
   const handleNewPurchaseSubmit = (data: PurchaseFormData) => {
+    const newPurchaseId = `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
+    
+    let supplierIdToUse = data.supplierId;
+    let supplierNameToUse = data.supplierName;
+
+    // Check and update/create supplier
+    const existingSupplierByName = suppliers.find(s => s.name.toLowerCase() === data.supplierName.toLowerCase());
+    
+    if (data.supplierId && existingSupplierByName && data.supplierId === existingSupplierByName.id) { // Existing supplier selected and ID matches
+      // Update existing supplier's contact details if they were changed in the form
+      const updatedSuppliers = suppliers.map(s => 
+        s.id === data.supplierId 
+        ? { ...s, 
+            name: data.supplierName, // Name might be slightly different casing, use form's
+            contactPerson: data.supplierContactPerson || s.contactPerson,
+            email: data.supplierEmail || s.email,
+            phone: data.supplierPhone || s.phone,
+          } 
+        : s
+      );
+      setSuppliers(updatedSuppliers);
+      supplierIdToUse = data.supplierId;
+      supplierNameToUse = data.supplierName;
+    } else if (existingSupplierByName && !data.supplierId) { // Typed name matches existing supplier, but wasn't selected via ID (e.g. new entry matching old name)
+       const updatedSuppliers = suppliers.map(s => 
+        s.id === existingSupplierByName.id
+        ? { ...s, 
+            contactPerson: data.supplierContactPerson || s.contactPerson,
+            email: data.supplierEmail || s.email,
+            phone: data.supplierPhone || s.phone,
+          } 
+        : s
+      );
+      setSuppliers(updatedSuppliers);
+      supplierIdToUse = existingSupplierByName.id;
+      supplierNameToUse = existingSupplierByName.name; // Use canonical name
+      toast({
+        title: "Supplier Updated",
+        description: `Details for ${existingSupplierByName.name} updated.`,
+      });
+    }
+     else { // New supplier
+      const newSupplier: Supplier = {
+        id: `SUP${Date.now().toString().slice(-5)}`,
+        name: data.supplierName,
+        contactPerson: data.supplierContactPerson,
+        email: data.supplierEmail,
+        phone: data.supplierPhone,
+        balance: '$0.00',
+      };
+      setSuppliers(prevSuppliers => [newSupplier, ...prevSuppliers]);
+      supplierIdToUse = newSupplier.id;
+      supplierNameToUse = newSupplier.name;
+      toast({
+        title: "New Supplier Added",
+        description: `${newSupplier.name} has been added.`,
+      });
+    }
+
     const newPurchase: Purchase = {
-      id: `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`,
-      date: data.purchaseDate.toISOString(),
-      supplierName: data.supplierName,
+      id: newPurchaseId,
+      date: data.purchaseDate!.toISOString(), // purchaseDate is now guaranteed by form validation
+      supplierId: supplierIdToUse,
+      supplierName: supplierNameToUse,
       supplierInvoiceNumber: data.supplierInvoiceNumber,
       items: data.items.map(item => ({
         partNumber: item.partNumber,
@@ -65,38 +126,22 @@ export default function PurchasesPage() {
       notes: data.notes,
     };
 
-    // Update inventory
-    const updatedInventory = inventoryParts.map(part => {
-      const purchasedItem = newPurchase.items.find(item => item.partNumber === part.partNumber);
-      if (purchasedItem) {
-        return { ...part, quantity: part.quantity + purchasedItem.quantityPurchased };
-      }
-      return part;
-    });
-    setInventoryParts(updatedInventory);
-
-    setPurchases(prevPurchases => [newPurchase, ...prevPurchases]);
-
-    // Add/Update supplier
-    const existingSupplier = suppliers.find(s => s.name.toLowerCase() === newPurchase.supplierName.toLowerCase());
-    if (!existingSupplier) {
-      const newSupplier: Supplier = {
-        id: `SUP${Date.now().toString().slice(-5)}`,
-        name: newPurchase.supplierName,
-        balance: '$0.00', // Default balance
-        // Contact details are not in PurchaseFormData, so they'd be undefined here
-        // Could be enhanced by adding more supplier fields to PurchaseForm
-      };
-      setSuppliers(prevSuppliers => [newSupplier, ...prevSuppliers]);
-      toast({
-        title: "New Supplier Added",
-        description: `${newSupplier.name} has been added to the supplier list.`,
+    // Update inventory only if status is 'Received'
+    if (newPurchase.status === 'Received') {
+      const updatedInventory = inventoryParts.map(part => {
+        const purchasedItem = newPurchase.items.find(item => item.partNumber === part.partNumber);
+        if (purchasedItem) {
+          return { ...part, quantity: part.quantity + purchasedItem.quantityPurchased };
+        }
+        return part;
       });
+      setInventoryParts(updatedInventory);
     }
 
+    setPurchases(prevPurchases => [newPurchase, ...prevPurchases]);
     toast({
       title: "Purchase Order Recorded",
-      description: `PO ID ${newPurchase.id} from ${newPurchase.supplierName} has been recorded.`,
+      description: `PO ID ${newPurchase.id} from ${supplierNameToUse} has been recorded.`,
     });
     setIsPurchaseFormOpen(false);
   };
@@ -105,9 +150,26 @@ export default function PurchasesPage() {
     setStatusFilters(prev => ({ ...prev, [statusKey]: checked }));
   };
 
+  const handlePurchaseStatusChange = (purchaseId: string, newStatus: Purchase['status']) => {
+    setPurchases(prevPurchases => 
+      prevPurchases.map(p => 
+        p.id === purchaseId ? { ...p, status: newStatus } : p
+      )
+    );
+    // Note: Inventory is NOT adjusted here. This is a known simplification.
+    // A more complex system would track received quantities or handle inventory based on status transitions.
+    toast({
+      title: "Status Updated",
+      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Inventory stock levels are not automatically adjusted by this status change alone.`,
+      duration: 7000,
+    });
+  };
+
   const filteredPurchases = purchases.filter(purchase =>
     (purchase.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     purchase.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+     purchase.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     (purchase.supplierId && purchase.supplierId.toLowerCase().includes(searchTerm.toLowerCase()))
+    ) &&
     (statusFilters[purchase.status])
   );
   
@@ -145,12 +207,12 @@ export default function PurchasesPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Purchase History</CardTitle>
-            <CardDescription>Review all recorded purchase orders.</CardDescription>
+            <CardDescription>Review all recorded purchase orders. Inventory is updated when PO status is 'Received' upon creation.</CardDescription>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by PO ID or supplier..."
+                  placeholder="Search by PO ID, supplier name/ID..."
                   className="pl-10 w-full"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -188,7 +250,6 @@ export default function PurchasesPage() {
                   <TableHead>Supplier</TableHead>
                   <TableHead className="text-right">Net Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  {/* No Actions column as per request */}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -196,12 +257,22 @@ export default function PurchasesPage() {
                   <TableRow key={purchase.id}>
                     <TableCell className="font-medium">{purchase.id}</TableCell>
                     <TableCell>{format(new Date(purchase.date), "PP")}</TableCell>
-                    <TableCell>{purchase.supplierName}</TableCell>
+                    <TableCell>{purchase.supplierName} {purchase.supplierId && <span className="text-xs text-muted-foreground">({purchase.supplierId})</span>}</TableCell>
                     <TableCell className="text-right">${purchase.netAmount.toFixed(2)}</TableCell>
                      <TableCell>
-                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(purchase.status)}`}>
-                        {purchase.status}
-                      </span>
+                       <Select
+                          value={purchase.status}
+                          onValueChange={(newStatus: Purchase['status']) => handlePurchaseStatusChange(purchase.id, newStatus)}
+                       >
+                        <SelectTrigger className={cn("h-8 text-xs w-auto min-w-[120px]", getStatusColor(purchase.status))}>
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {purchaseStatuses.map(s => (
+                                <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
+                            ))}
+                        </SelectContent>
+                       </Select>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -220,6 +291,7 @@ export default function PurchasesPage() {
         onOpenChange={setIsPurchaseFormOpen}
         onSubmit={handleNewPurchaseSubmit}
         inventoryParts={inventoryParts}
+        inventorySuppliers={suppliers}
       />
     </AppLayout>
   );

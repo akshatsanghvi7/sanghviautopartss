@@ -55,6 +55,7 @@ export type PurchaseItem = {
 export type Purchase = {
   id: string; // Unique PO identifier
   date: string; // ISO string for purchase date
+  supplierId?: string; // Store ID of the supplier
   supplierName: string;
   supplierInvoiceNumber?: string; // Optional
   items: PurchaseItem[];
