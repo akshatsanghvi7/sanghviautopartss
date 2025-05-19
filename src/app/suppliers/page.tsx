@@ -17,7 +17,7 @@ import { SupplierPurchaseHistoryDialog } from '@/components/suppliers/SupplierPu
 // Initial mock data if localStorage is empty
 const initialMockSuppliers: Supplier[] = [
   { id: 'SUP001', name: 'AutoParts Pro', contactPerson: 'Sarah Connor', email: 'sales@autopartspro.com', phone: '555-0011', balance: 0 },
-  { id: 'SUP002', name: 'Speedy Spares', contactPerson: 'Mike Wheeler', email: 'info@speedyspares.co', phone: '555-0022', balance: 0 },
+  { id: 'SUP002', name: 'Speedy Spares', contactPerson: 'Mike Wheeler', email: 'info@speedyspares.co', phone: '555-0022', balance: 125.50 },
   { id: 'SUP003', name: 'Global Auto Inc.', contactPerson: 'Linda Hamilton', email: 'accounts@globalauto.com', phone: '555-0033', balance: 0 },
 ];
 
@@ -34,7 +34,25 @@ export default function SuppliersPage() {
 
   const uniqueSuppliers = useMemo(() => {
     const seenIds = new Set<string>();
-    return suppliers.filter(supplier => {
+    // First, process suppliers to ensure balance is a number
+    const processedSuppliers = suppliers.map(s => {
+      let numericBalance = 0;
+      if (typeof s.balance === 'number') {
+        numericBalance = s.balance;
+      } else if (typeof s.balance === 'string') {
+        // Attempt to parse the string, removing currency symbols etc.
+        const parsed = parseFloat(String(s.balance).replace(/[^0-9.-]+/g,""));
+        numericBalance = isNaN(parsed) ? 0 : parsed;
+      } else if (s.balance === undefined || s.balance === null) {
+        // Handles cases where balance might be undefined or null from old data
+        numericBalance = 0;
+      }
+      // Return a new object with the normalized balance
+      return { ...s, balance: numericBalance };
+    });
+
+    // Then, filter for uniqueness by ID
+    return processedSuppliers.filter(supplier => {
       if (!supplier || !supplier.id) return false; 
       if (seenIds.has(supplier.id)) {
         return false;
@@ -51,7 +69,7 @@ export default function SuppliersPage() {
   );
 
   const handleAddSupplier = () => {
-    toast({ title: "Feature Coming Soon", description: "Ability to manually add suppliers will be implemented. Suppliers are currently added automatically via Purchase Orders if they don't exist or their contact details are updated." });
+    toast({ title: "Feature Coming Soon", description: "Ability to manually add suppliers will be implemented. Suppliers are currently added or updated automatically via Purchase Orders." });
   };
 
   const handleEditSupplier = (supplierId: string) => {
@@ -85,7 +103,7 @@ export default function SuppliersPage() {
         supplier.contactPerson || '',
         supplier.email || '',
         supplier.phone || '',
-        supplier.balance.toFixed(2), // Export numeric balance
+        typeof supplier.balance === 'number' ? supplier.balance.toFixed(2) : '0.00',
       ])
     ];
 
@@ -115,7 +133,7 @@ export default function SuppliersPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Supplier Management</h1>
-            <p className="text-muted-foreground">Manage your supplier information. Balances represent amount owed from 'On Credit' purchases.</p>
+            <p className="text-muted-foreground">Manage your supplier information. Balances represent amount owed from 'On Credit' purchases and are updated automatically.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleExportToExcel}>
@@ -131,8 +149,8 @@ export default function SuppliersPage() {
           <CardHeader>
             <CardTitle>Supplier List</CardTitle>
             <CardDescription>
-              Browse, search, and manage your suppliers. New suppliers are automatically added from purchases, and details are updated if changed in a PO.
-              If you see issues like phone numbers in email fields, this indicates a data entry error.
+              Browse, search, and manage your suppliers. New suppliers are automatically added from purchases, and details/balances are updated.
+              If you see issues like phone numbers in email fields, this may indicate a data entry error during purchase.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -169,7 +187,7 @@ export default function SuppliersPage() {
                     <TableCell>
                         {supplier.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{supplier.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">${supplier.balance.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">${(typeof supplier.balance === 'number' ? supplier.balance : 0).toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)}>
                         <History className="h-4 w-4" />

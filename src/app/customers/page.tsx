@@ -9,7 +9,7 @@ import { PlusCircle, Search, Edit2, Trash2, Mail, Phone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Customer } from '@/lib/types';
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react'; // Added useMemo
 import { useToast } from "@/hooks/use-toast";
 
 // Initial mock data if localStorage is empty
@@ -25,14 +25,32 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (customer.phone && customer.phone.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const processedCustomers = useMemo(() => {
+    return customers.map(c => {
+      let numericBalance = 0;
+      if (typeof c.balance === 'number') {
+        numericBalance = c.balance;
+      } else if (typeof c.balance === 'string') {
+        const parsed = parseFloat(String(c.balance).replace(/[^0-9.-]+/g,""));
+        numericBalance = isNaN(parsed) ? 0 : parsed;
+      } else if (c.balance === undefined || c.balance === null) {
+        numericBalance = 0;
+      }
+      return { ...c, balance: numericBalance };
+    });
+  }, [customers]);
+
+  const filteredCustomers = useMemo(() => {
+    return processedCustomers.filter(customer =>
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (customer.phone && customer.phone.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [processedCustomers, searchTerm]);
+
 
   const handleAddCustomer = () => {
-    toast({ title: "Feature Coming Soon", description: "Ability to manually add customers will be implemented." });
+    toast({ title: "Feature Coming Soon", description: "Ability to manually add customers will be implemented. Customers are currently added automatically from Sales if they don't exist." });
   };
 
   const handleEditCustomer = (customerId: string) => {
@@ -50,7 +68,7 @@ export default function CustomersPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Customer Management</h1>
-            <p className="text-muted-foreground">Manage your customer database.</p>
+            <p className="text-muted-foreground">Manage your customer database. Balances are not automatically updated from sales in this version.</p>
           </div>
           <Button onClick={handleAddCustomer}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add Customer
@@ -94,7 +112,7 @@ export default function CustomersPage() {
                     <TableCell>
                       {customer.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{customer.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">${customer.balance.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">${(typeof customer.balance === 'number' ? customer.balance : 0).toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)}>
                         <Edit2 className="h-4 w-4" />
