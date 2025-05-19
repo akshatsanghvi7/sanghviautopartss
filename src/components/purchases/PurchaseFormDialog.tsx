@@ -22,8 +22,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// Removed ScrollArea import as the form itself will handle scrolling for the main content.
-// Specific ScrollAreas can be used internally if needed (e.g., for long suggestion lists).
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -90,6 +88,7 @@ export function PurchaseFormDialog({
       otherCharges: 0,
       paymentType: 'bank_transfer',
       status: 'Pending',
+      supplierId: undefined,
       supplierName: '',
       supplierContactPerson: '',
       supplierEmail: '',
@@ -150,8 +149,7 @@ export function PurchaseFormDialog({
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
   const handleSupplierNameChange = (name: string) => {
-    setValue("supplierName", name, { shouldValidate: true });
-
+    // This function is now called by the Controller's render prop's onChange
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
@@ -161,7 +159,7 @@ export function PurchaseFormDialog({
     } else {
       setSupplierSuggestions([]);
       setIsSupplierPopoverOpen(false);
-      if (!initialData?.id) {
+      if (!initialData?.id) { // Only clear related fields if it's a new PO and not editing
           setValue("supplierId", undefined);
           setValue("supplierContactPerson", "");
           setValue("supplierEmail", "");
@@ -172,7 +170,7 @@ export function PurchaseFormDialog({
 
   const handleSupplierSelect = (supplier: Supplier) => {
     setValue("supplierId", supplier.id);
-    setValue("supplierName", supplier.name);
+    setValue("supplierName", supplier.name); // This will also update the Controller's field
     setValue("supplierContactPerson", supplier.contactPerson || "");
     setValue("supplierEmail", supplier.email || "");
     setValue("supplierPhone", supplier.phone || "");
@@ -188,19 +186,15 @@ export function PurchaseFormDialog({
   const handlePartSearch = (term: string) => {
     setPartSearchTerm(term);
     if (!term) {
-        setSelectedPartForAdding(null);
-        return;
+        setSelectedPartForAdding(null); // Clear selection if search term is cleared
     }
-    const part = inventoryParts.find(p =>
-        p.partNumber.toLowerCase().includes(term.toLowerCase()) ||
-        p.partName.toLowerCase().includes(term.toLowerCase())
-    );
-    setSelectedPartForAdding(part || null);
+    // No immediate selection here, selection happens via selectPartFromSearch
   };
 
   const selectPartFromSearch = (part: Part) => {
     setSelectedPartForAdding(part);
-    setPartSearchTerm(part.partName);
+    setPartSearchTerm(part.partName); // Update search term to reflect selected part name for clarity
+    // Clear suggestions as a part is now selected
   }
 
   const handleAddItem = () => {
@@ -226,7 +220,7 @@ export function PurchaseFormDialog({
       const existingItem = fields[existingItemIndex];
       const newQuantity = existingItem.quantity + quantity;
       setValue(`items.${existingItemIndex}.quantity`, newQuantity);
-      setValue(`items.${existingItemIndex}.unitCost`, unitCost);
+      setValue(`items.${existingItemIndex}.unitCost`, unitCost); // Potentially update cost if re-added
       toast({ title: "Item Updated", description: `Quantity for ${selectedPartForAdding.partName} updated.` });
     } else {
       append({
@@ -238,10 +232,11 @@ export function PurchaseFormDialog({
        toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} added to PO.` });
     }
 
-    setPartSearchTerm('');
-    setSelectedPartForAdding(null);
+    setPartSearchTerm(''); // Clear search term
+    setSelectedPartForAdding(null); // Clear selected part
     setCurrentQuantityInput(1);
     setCurrentUnitCostInput(0);
+    document.getElementById('partSearch')?.focus(); // Focus back on part search
   };
 
   const watchedItems = watch("items");
@@ -264,8 +259,10 @@ export function PurchaseFormDialog({
   const netAmount = subTotal + numericShipping + numericOtherCharges;
 
   const filteredInventoryParts = inventoryParts.filter(part =>
-    part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
-    part.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase())
+    partSearchTerm && (
+        part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
+        part.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase())
+    )
   ).slice(0, 5);
 
   const handleFormSubmitInternal: SubmitHandler<PurchaseFormData> = (data) => {
@@ -294,12 +291,12 @@ export function PurchaseFormDialog({
             {initialData?.id ? 'Update the details of this purchase order.' : 'Fill in the details for the new purchase order.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
+        <form id="purchaseFormId" onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
         {/* Supplier Details Section */}
         <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Supplier Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
+                <div>
                 <Label htmlFor="supplierName">Supplier Name *</Label>
                 <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
@@ -311,13 +308,15 @@ export function PurchaseFormDialog({
                                     id="supplierName"
                                     {...field}
                                     onChange={(e) => {
-                                        field.onChange(e);
-                                        handleSupplierNameChange(e.target.value);
+                                        field.onChange(e); // Update RHF state
+                                        handleSupplierNameChange(e.target.value); // Handle suggestions
                                     }}
                                     onFocus={() => {
-                                       if(getValues("supplierName") && getValues("supplierName").length > 0 && supplierSuggestions.length > 0) {
-                                           setIsSupplierPopoverOpen(true);
-                                       }
+                                        // Show suggestions if input has text and suggestions exist
+                                        if(field.value && field.value.length > 0 && inventorySuppliers.filter(s=>s.name.toLowerCase().includes(field.value.toLowerCase())).length > 0) {
+                                            setSupplierSuggestions(inventorySuppliers.filter(s=>s.name.toLowerCase().includes(field.value.toLowerCase())));
+                                            setIsSupplierPopoverOpen(true);
+                                        }
                                     }}
                                     autoComplete="off"
                                 />
@@ -328,9 +327,9 @@ export function PurchaseFormDialog({
                         <PopoverContent
                             className="w-[--radix-popover-trigger-width] p-0"
                             align="start"
-                            onOpenAutoFocus={(e) => e.preventDefault()} // Prevents popover from stealing focus
+                            onOpenAutoFocus={(e) => e.preventDefault()}
                         >
-                            <div className="max-h-40 overflow-y-auto">
+                            <div className="max-h-40 overflow-y-auto custom-scrollbar">
                                 {supplierSuggestions.map((s) => (
                                 <div
                                     key={s.id}
@@ -435,7 +434,7 @@ export function PurchaseFormDialog({
             {errors.items?.message && <p className="text-sm text-destructive">{errors.items.message}</p>}
 
             <div className="space-y-3">
-                <div className="relative">
+                <div> {/* Wrapper for search input */}
                     <Label htmlFor="partSearch">Search Part (Name/Number)</Label>
                     <Input
                         id="partSearch"
@@ -444,8 +443,12 @@ export function PurchaseFormDialog({
                         placeholder="Type to search part..."
                         autoComplete="off"
                     />
-                    {partSearchTerm && filteredInventoryParts.length > 0 && (
-                        <div className="absolute z-10 w-full bg-background border mt-1 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                </div>
+
+                {/* Conditional rendering block for suggestions OR "not found" message */}
+                {partSearchTerm && (
+                    filteredInventoryParts.length > 0 ? (
+                        <div className="bg-background border mt-1 rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
                             {filteredInventoryParts.map(part => (
                                 <div
                                     key={part.partNumber}
@@ -456,14 +459,22 @@ export function PurchaseFormDialog({
                                 </div>
                             ))}
                         </div>
-                    )}
-                </div>
+                    ) : (
+                         partSearchTerm.length > 0 && !selectedPartForAdding && ( // Only show if search term exists, no part selected, and no results
+                            <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
+                                Part not found: "{partSearchTerm}". Please add new parts via the Inventory page.
+                            </div>
+                        )
+                    )
+                )}
+
                 {selectedPartForAdding && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                         Selected: {selectedPartForAdding.partName} (Current Stock: {selectedPartForAdding.quantity})
                     </p>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                     <div>
                         <Label htmlFor="currentQuantityInput">Quantity to Purchase *</Label>
                         <Input
@@ -480,7 +491,7 @@ export function PurchaseFormDialog({
                     </div>
                 </div>
                 <Button type="button" onClick={handleAddItem} className="w-full sm:w-auto" disabled={!selectedPartForAdding}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Item to PO
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Item to PO
                 </Button>
             </div>
 
@@ -518,7 +529,7 @@ export function PurchaseFormDialog({
             )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4"> {/* Removed mt-6, border-t. Spacing handled by form's space-y-6 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
             <div>
                 <Label htmlFor="shippingCosts">Shipping Costs</Label>
                 <Input id="shippingCosts" type="number" {...register("shippingCosts")} placeholder="0.00" step="0.01" />
@@ -534,12 +545,12 @@ export function PurchaseFormDialog({
                 <p className="text-xl font-bold text-foreground">Net Amount: ${netAmount.toFixed(2)}</p>
             </div>
         </div>
-        <div className="pt-4"> {/* Removed mt-4, border-t */}
+        <div className="pt-4">
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" {...register("notes")} placeholder="Any specific notes for this purchase order..." />
         </div>
         </form>
-        <DialogFooter className="pt-4 border-t bg-background pb-4"> {/* Adjusted padding */}
+        <DialogFooter className="pt-4 border-t bg-background pb-4">
             <DialogClose asChild>
                 <Button type="button" variant="outline" onClick={resetFormState}>Cancel</Button>
             </DialogClose>
@@ -549,5 +560,3 @@ export function PurchaseFormDialog({
     </Dialog>
   );
 }
-
-    
