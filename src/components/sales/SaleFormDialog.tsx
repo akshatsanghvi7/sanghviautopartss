@@ -19,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { DatePicker } from '@/components/ui/date-picker'; // Assuming a simple date picker
+import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -38,7 +38,7 @@ const saleFormSchema = z.object({
   gstNumber: z.string().optional(),
   contactDetails: z.string().optional(),
   emailAddress: z.string().email("Invalid email address").optional().or(z.literal('')),
-  saleDate: z.date({ required_error: "Sale Date is required" }),
+  saleDate: z.date({ required_error: "Sale Date is required" }).optional().nullable(), // Allow undefined/null initially
   paymentType: z.enum(['cash', 'credit'], { required_error: "Payment Type is required" }),
   items: z.array(saleItemSchema).min(1, "At least one item must be added to the sale"),
   discount: z.coerce.number().min(0, "Discount cannot be negative").optional(),
@@ -69,14 +69,19 @@ export function SaleFormDialog({
     reset,
     watch,
     setValue,
+    getValues, // Added getValues
     formState: { errors },
   } = useForm<SaleFormData>({
     resolver: zodResolver(saleFormSchema),
     defaultValues: {
-      saleDate: new Date(),
+      saleDate: undefined, // Initialize as undefined for hydration safety
       items: [],
       discount: 0,
       paymentType: 'cash',
+      buyerName: '',
+      gstNumber: '',
+      contactDetails: '',
+      emailAddress: '',
     },
   });
 
@@ -91,9 +96,17 @@ export function SaleFormDialog({
   const [partSearchTerm, setPartSearchTerm] = useState('');
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      // When dialog opens, if it's for a new sale (e.g., saleDate is not set),
+      // set it to the current date.
+      if (!getValues('saleDate')) {
+        setValue('saleDate', new Date());
+      }
+    } else {
+      // When dialog closes, reset the form.
+      // Set saleDate to undefined to ensure consistency for next open.
       reset({
-        saleDate: new Date(),
+        saleDate: undefined,
         items: [],
         discount: 0,
         paymentType: 'cash',
@@ -107,7 +120,8 @@ export function SaleFormDialog({
       setSelectedPartForAdding(null);
       setPartSearchTerm('');
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, setValue, getValues]);
+
 
   const handlePartSearch = (partNumber: string) => {
     setCurrentPartNumberInput(partNumber);
@@ -172,7 +186,11 @@ export function SaleFormDialog({
   ).slice(0, 5); // Limit results for performance
 
   const handleFormSubmitInternal: SubmitHandler<SaleFormData> = (data) => {
-    onSubmit(data);
+     if (!data.saleDate) {
+      toast({ title: "Sale Date Missing", description: "Please select a sale date.", variant: "destructive" });
+      return;
+    }
+    onSubmit(data as SaleFormData & { saleDate: Date }); // Ensure saleDate is a Date for the parent
   };
 
   return (
@@ -210,7 +228,7 @@ export function SaleFormDialog({
                 control={control}
                 render={({ field }) => (
                     <DatePicker
-                        date={field.value}
+                        date={field.value || undefined} // Pass undefined if null/undefined
                         setDate={(date) => field.onChange(date)}
                     />
                 )}
@@ -356,45 +374,3 @@ export function SaleFormDialog({
     </Dialog>
   );
 }
-
-// Minimal DatePicker if not available, or use shadcn one
-// For now, using a simple input type="date" if full component isn't there.
-// Ideally, src/components/ui/date-picker.tsx would be used.
-// This is just a placeholder in case date-picker is missing.
-// If you have `DatePickerWithRange` or a single `DatePicker` from shadcn, use that.
-// For this component, we only need a single date picker.
-
-// Basic DatePicker component (replace with your shadcn one if available)
-// import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-// import { CalendarIcon } from "lucide-react";
-// import { Calendar } from "@/components/ui/calendar";
-// import { format } from "date-fns";
-
-// export function DatePicker({ date, setDate }: { date?: Date, setDate: (date?: Date) => void }) {
-//   return (
-//     <Popover>
-//       <PopoverTrigger asChild>
-//         <Button
-//           variant={"outline"}
-//           className={cn(
-//             "w-full justify-start text-left font-normal",
-//             !date && "text-muted-foreground"
-//           )}
-//         >
-//           <CalendarIcon className="mr-2 h-4 w-4" />
-//           {date ? format(date, "PPP") : <span>Pick a date</span>}
-//         </Button>
-//       </PopoverTrigger>
-//       <PopoverContent className="w-auto p-0">
-//         <Calendar
-//           mode="single"
-//           selected={date}
-//           onSelect={setDate}
-//           initialFocus
-//         />
-//       </PopoverContent>
-//     </Popover>
-//   );
-// }
-// Assume DatePicker is in ui, if not, the form might have issues with date field.
-// Added it to ui directory based on reports page.
