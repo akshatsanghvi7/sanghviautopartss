@@ -64,7 +64,6 @@ export function SupplierPurchaseHistoryDialog({
         ? { text: 'Paid', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' }
         : { text: 'Due', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' };
     }
-    // For non-credit purchases, assume paid upfront
     return { text: 'Paid (Upfront)', className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
   };
 
@@ -97,7 +96,7 @@ export function SupplierPurchaseHistoryDialog({
                     <TableRow key={purchase.id}>
                       <TableCell className="font-medium">{purchase.id}</TableCell>
                       <TableCell>{format(new Date(purchase.date), "PP")}</TableCell>
-                      <TableCell className="text-right">${purchase.netAmount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">₹{purchase.netAmount.toFixed(2)}</TableCell>
                       <TableCell>
                           <span className={cn("px-2 py-1 text-xs font-medium rounded-full", getStatusColor(purchase.status))}>
                               {purchase.status}

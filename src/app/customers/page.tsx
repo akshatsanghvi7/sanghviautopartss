@@ -9,7 +9,7 @@ import { PlusCircle, Search, Edit2, Trash2, Mail, Phone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Customer } from '@/lib/types';
-import React, { useState, useMemo } from 'react'; // Added useMemo
+import React, { useState, useMemo } from 'react'; 
 import { useToast } from "@/hooks/use-toast";
 
 // Initial mock data if localStorage is empty
@@ -112,7 +112,7 @@ export default function CustomersPage() {
                     <TableCell>
                       {customer.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{customer.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">${(typeof customer.balance === 'number' ? customer.balance : 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{(typeof customer.balance === 'number' ? customer.balance : 0).toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)}>
                         <Edit2 className="h-4 w-4" />

@@ -22,7 +22,7 @@ const initialMockSuppliers: Supplier[] = [
   { id: 'SUP003', name: 'Global Auto Inc.', contactPerson: 'Linda Hamilton', email: 'accounts@globalauto.com', phone: '555-0033', balance: 0 },
 ];
 
-const excelColumns = ["Supplier ID", "Name", "Contact Person", "Email", "Phone", "Balance Owed ($)"];
+const excelColumns = ["Supplier ID", "Name", "Contact Person", "Email", "Phone", "Balance Owed (₹)"];
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>('autocentral-suppliers', initialMockSuppliers);
@@ -99,7 +99,7 @@ export default function SuppliersPage() {
     const supplierName = suppliers.find(s => s.id === supplierId)?.name || 'Supplier';
     toast({
       title: "Balance Updated",
-      description: `Balance for ${supplierName} has been updated to $${newBalance.toFixed(2)}.`,
+      description: `Balance for ${supplierName} has been updated to ₹${newBalance.toFixed(2)}.`,
     });
   };
 
@@ -205,7 +205,7 @@ export default function SuppliersPage() {
                     <TableCell>
                         {supplier.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{supplier.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">${(typeof supplier.balance === 'number' ? supplier.balance : 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{(typeof supplier.balance === 'number' ? supplier.balance : 0).toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)} title="View Purchase History">
                         <History className="h-4 w-4" />

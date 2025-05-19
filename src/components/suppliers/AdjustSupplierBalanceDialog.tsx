@@ -74,12 +74,12 @@ export function AdjustSupplierBalanceDialog({
         <DialogHeader>
           <DialogTitle>Adjust Balance for {supplier.name}</DialogTitle>
           <DialogDescription>
-            Manually set the new total balance owed to this supplier. Use this, for example, after making a payment to update the amount you owe. Current balance: ${supplier.balance.toFixed(2)}.
+            Manually set the new total balance owed to this supplier. Use this, for example, after making a payment to update the amount you owe. Current balance: ₹{supplier.balance.toFixed(2)}.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="newBalance">New Balance Owed ($)</Label>
+            <Label htmlFor="newBalance">New Balance Owed (₹)</Label>
             <Input
               id="newBalance"
               type="number"

@@ -48,25 +48,10 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDia
   };
 
   const handlePrintInvoice = () => {
-    // Basic browser print
-    // For better results, a dedicated PDF generation library would be used
-    // or a specific printable HTML layout.
     toast({
         title: "Print Initiated (Simulated)",
         description: "If this were a real app, a print dialog would appear.",
     });
-    // Example of how one might trigger print for a specific section:
-    // const printableArea = document.getElementById('invoice-content');
-    // if (printableArea) {
-    //   const printWindow = window.open('', '_blank');
-    //   printWindow?.document.write(printableArea.innerHTML);
-    //   // Add styles if needed
-    //   printWindow?.document.close();
-    //   printWindow?.focus();
-    //   printWindow?.print();
-    //   printWindow?.close();
-    // }
-    // For now, just a toast.
   };
 
 
@@ -134,8 +119,8 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDia
                       <p className="text-xs text-muted-foreground">{item.partNumber}</p>
                     </TableCell>
                     <TableCell className="text-right">{item.quantitySold}</TableCell>
-                    <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">${item.itemTotal.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{item.unitPrice.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{item.itemTotal.toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -146,18 +131,18 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDia
               <div className="w-full max-w-xs space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">${sale.subTotal.toFixed(2)}</span>
+                  <span className="font-medium">₹{sale.subTotal.toFixed(2)}</span>
                 </div>
                 {sale.discount !== undefined && sale.discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Discount:</span>
-                    <span className="font-medium">-${sale.discount.toFixed(2)}</span>
+                    <span className="font-medium">-₹{sale.discount.toFixed(2)}</span>
                   </div>
                 )}
                  <Separator />
                 <div className="flex justify-between text-lg font-bold">
                   <span className="text-primary">Net Amount:</span>
-                  <span className="text-primary">${sale.netAmount.toFixed(2)}</span>
+                  <span className="text-primary">₹{sale.netAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -167,7 +152,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDia
             {/* Footer / Thank you note */}
             <div className="text-center text-muted-foreground">
               <p>Thank you for your business!</p>
-              <p>All amounts are in USD (unless otherwise specified).</p>
+              <p>All amounts are in INR (unless otherwise specified).</p>
             </div>
           </div>
         </ScrollArea>

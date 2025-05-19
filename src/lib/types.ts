@@ -16,7 +16,7 @@ export type Part = {
   quantity: number;
   costPrice?: number; // Optional for now, as MRP is requested
   sellingPrice?: number; // This could be the same as MRP or different
-  mrp: string; // Renamed from price, and as per user request
+  mrp: string; // Stores value like "₹100.00"
   shelf?: string;
   supplierId?: string;
 };

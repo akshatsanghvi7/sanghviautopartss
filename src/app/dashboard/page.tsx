@@ -1,3 +1,4 @@
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
@@ -5,7 +6,7 @@ import { DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
 export default function DashboardPage() {
   // Placeholder data - in a real app, this would come from state or API
   const summaryStats = [
-    { title: "Total Revenue", value: "$125,670", icon: DollarSign, change: "+12.5%", changeType: "positive" as const, dataAiHint: "money chart" },
+    { title: "Total Revenue", value: "₹125,670", icon: DollarSign, change: "+12.5%", changeType: "positive" as const, dataAiHint: "money chart" },
     { title: "Parts in Stock", value: "1,890", icon: Package, change: "-2.1%", changeType: "negative" as const, dataAiHint: "inventory boxes" },
     { title: "Active Customers", value: "342", icon: Users, change: "+5", changeType: "positive" as const, dataAiHint: "people community" },
     { title: "Sales Today", value: "28", icon: ShoppingCart, change: "+8.0%", changeType: "positive" as const, dataAiHint: "shopping cart" },

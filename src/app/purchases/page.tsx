@@ -60,24 +60,29 @@ export default function PurchasesPage() {
     let supplierAdded = false;
     let finalSupplierBalanceForToast: number = 0;
 
-    if (data.supplierId) {
+    if (data.supplierId) { // Supplier selected from suggestion
         existingSupplier = suppliers.find(s => s.id === data.supplierId);
     }
-    if (!existingSupplier && formSupplierNameTrimmed) {
+    if (!existingSupplier && formSupplierNameTrimmed) { // No ID, try matching by name (case-insensitive, trimmed)
         existingSupplier = suppliers.find(s => s.name.trim().toLowerCase() === formSupplierNameTrimmed.toLowerCase());
     }
 
-    if (existingSupplier) {
-        supplierIdToUse = existingSupplier.id;
-        nameForPurchaseRecord = formSupplierNameTrimmed; 
 
+    if (existingSupplier) { // Existing supplier found
+        supplierIdToUse = existingSupplier.id;
+        
         const updatedSupplierData: Partial<Supplier> = {};
         let detailsChanged = false;
 
+        // Check if name changed (case-insensitive and trim-insensitive)
         if (existingSupplier.name.trim().toLowerCase() !== formSupplierNameTrimmed.toLowerCase() && formSupplierNameTrimmed) {
-            updatedSupplierData.name = formSupplierNameTrimmed; 
+            updatedSupplierData.name = formSupplierNameTrimmed;
+            nameForPurchaseRecord = formSupplierNameTrimmed; // Use updated name for PO
             detailsChanged = true;
+        } else {
+            nameForPurchaseRecord = existingSupplier.name; // Use existing name for PO if not changed
         }
+
         if ((data.supplierContactPerson || "") !== (existingSupplier.contactPerson || "")) {
             updatedSupplierData.contactPerson = data.supplierContactPerson;
             detailsChanged = true;
@@ -98,23 +103,22 @@ export default function PurchasesPage() {
         
         if (newBalance !== (typeof existingSupplier.balance === 'number' ? existingSupplier.balance : 0)) {
             updatedSupplierData.balance = newBalance;
-            detailsChanged = true;
+            detailsChanged = true; // Balance change counts as a detail change for toast
         } else if (!('balance' in updatedSupplierData) && typeof existingSupplier.balance !== 'number') {
-             // Ensure balance is set if it wasn't numeric before
-            updatedSupplierData.balance = newBalance;
+            updatedSupplierData.balance = newBalance; // Ensure balance is set if it wasn't numeric
         }
         
         finalSupplierBalanceForToast = newBalance;
 
-        if (detailsChanged || updatedSupplierData.balance !== existingSupplier.balance) { // Check if balance explicitly changed
+        if (detailsChanged || (updatedSupplierData.balance !== undefined && updatedSupplierData.balance !== existingSupplier.balance)) { 
             setSuppliers(prevSuppliers => prevSuppliers.map(s =>
                 s.id === existingSupplier!.id
-                ? { ...s, ...updatedSupplierData, name: updatedSupplierData.name || s.name, balance: newBalance }
+                ? { ...s, ...updatedSupplierData, balance: newBalance }
                 : s
             ));
             supplierUpdated = true;
         }
-    } else { 
+    } else { // New supplier
         const newSupplierNumericBalance = data.paymentType === 'on_credit' ? (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0)) : 0;
         const newSupplierData: Supplier = {
             id: `SUP${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2,3).toUpperCase()}`,
@@ -134,12 +138,12 @@ export default function PurchasesPage() {
     if (supplierAdded) {
         toast({
             title: "New Supplier Added",
-            description: `${formSupplierNameTrimmed} added. Balance Owed: $${finalSupplierBalanceForToast.toFixed(2)}`,
+            description: `${nameForPurchaseRecord} added. Balance Owed: ₹${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     } else if (supplierUpdated) {
          toast({
             title: "Supplier Updated",
-            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance Owed: $${finalSupplierBalanceForToast.toFixed(2)}`,
+            description: `Details for ${nameForPurchaseRecord} updated. Current Balance Owed: ₹${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     }
 
@@ -226,15 +230,15 @@ export default function PurchasesPage() {
       return updatedPurchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     });
 
-    if (purchaseToUpdate && oldStatus) {
+    if (purchaseToUpdate && oldStatus !== undefined && oldStatus !== newStatus) {
       if (newStatus === 'Received' && oldStatus !== 'Received') {
         updateInventoryForPurchase(purchaseToUpdate.items, 'increase');
       } else if (newStatus !== 'Received' && oldStatus === 'Received') {
         updateInventoryForPurchase(purchaseToUpdate.items, 'decrease');
-      } else if (newStatus !== oldStatus) { // Only toast if status actually changed
+      } else {
          toast({
             title: "Order Status Updated",
-            description: `Purchase Order ${purchaseId} status changed to ${newStatus}. No inventory change as status did not cross 'Received' threshold.`,
+            description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Inventory not affected as status did not cross 'Received' threshold or was already 'Received'.`,
             duration: 7000,
         });
       }
@@ -254,18 +258,18 @@ export default function PurchasesPage() {
           const newPaymentSettled = newPaymentSelection === 'paid';
 
           if (oldPaymentSettled === newPaymentSettled) {
-            purchaseToUpdate = p; // No change needed for purchase itself
-            return p; // No actual change to purchase, but we might need supplier info
+            // No change needed for purchase itself, but might need supplier info if other logic relied on it
+            // For now, this means no action and no toast.
+            return p; 
           }
           
           purchaseToUpdate = { ...p, paymentSettled: newPaymentSettled };
           finalSupplierName = p.supplierName;
 
-          if (oldPaymentSettled === false && newPaymentSettled === true) { // Was Due, now Paid
-            balanceChange = -p.netAmount;
-          } else if (oldPaymentSettled === true && newPaymentSettled === false) { // Was Paid, now Due
-            balanceChange = p.netAmount;
-          }
+          // If was Due (false) and now Paid (true), balance decreases (negative change)
+          // If was Paid (true) and now Due (false), balance increases (positive change)
+          balanceChange = newPaymentSettled ? -p.netAmount : p.netAmount;
+          
           return purchaseToUpdate;
         }
         return p;
@@ -287,7 +291,7 @@ export default function PurchasesPage() {
     if (purchaseToUpdate && balanceChange !== 0 && supplierToUpdate) {
         toast({
             title: `Payment Status Updated for PO ${purchaseId}`,
-            description: `Marked as ${newPaymentSelection.toUpperCase()}. Supplier ${finalSupplierName}'s balance updated to $${supplierToUpdate.balance.toFixed(2)}.`,
+            description: `Marked as ${newPaymentSelection.toUpperCase()}. Supplier ${finalSupplierName}'s balance updated to ₹${supplierToUpdate.balance.toFixed(2)}.`,
         });
     } else if (purchaseToUpdate && purchaseToUpdate.paymentType !== 'on_credit') {
         toast({title: "Action Not Applicable", description: `Payment status can only be changed for 'On Credit' POs. This PO is ${purchaseToUpdate.paymentType}.`})
@@ -402,7 +406,7 @@ export default function PurchasesPage() {
                       <TableCell className="font-medium">{purchase.id}</TableCell>
                       <TableCell>{format(new Date(purchase.date), "PP")}</TableCell>
                       <TableCell>{purchase.supplierName} {purchase.supplierId && <span className="text-xs text-muted-foreground">({purchase.supplierId})</span>}</TableCell>
-                      <TableCell className="text-right">${purchase.netAmount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">₹{purchase.netAmount.toFixed(2)}</TableCell>
                       <TableCell>
                         <Select
                             value={purchase.status}
@@ -479,6 +483,3 @@ export default function PurchasesPage() {
     </AppLayout>
   );
 }
-
-
-    

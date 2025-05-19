@@ -52,7 +52,7 @@ export default function SalesPage() {
   const handleNewSaleSubmit = (data: SaleFormData) => {
     const newSale: Sale = {
       id: `S${Date.now().toString().slice(-4)}${Math.random().toString(36).substr(2, 2).toUpperCase()}`, 
-      date: data.saleDate.toISOString(),
+      date: data.saleDate!.toISOString(), // saleDate is now guaranteed by form validation
       buyerName: data.buyerName,
       gstNumber: data.gstNumber,
       contactDetails: data.contactDetails,
@@ -88,7 +88,7 @@ export default function SalesPage() {
         name: newSale.buyerName,
         email: newSale.emailAddress,
         phone: newSale.contactDetails,
-        balance: 0, // Initialize balance as a number
+        balance: 0, 
       };
       setCustomers(prevCustomers => [newCustomer, ...prevCustomers]);
       toast({
@@ -200,7 +200,7 @@ export default function SalesPage() {
                     <TableCell className="font-medium">{sale.id}</TableCell>
                     <TableCell>{format(new Date(sale.date), "PPp")}</TableCell>
                     <TableCell>{sale.buyerName}</TableCell>
-                    <TableCell className="text-right">${sale.netAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{sale.netAmount.toFixed(2)}</TableCell>
                     <TableCell>
                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                         sale.paymentType === 'cash' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :

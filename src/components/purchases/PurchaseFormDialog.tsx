@@ -148,7 +148,7 @@ export function PurchaseFormDialog({
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
   const handleSupplierNameChange = (name: string) => {
-    setValue('supplierName', name, { shouldValidate: true }); // Keep RHF in sync
+    setValue('supplierName', name, { shouldValidate: true }); 
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
@@ -445,8 +445,7 @@ export function PurchaseFormDialog({
                     />
                 </div>
             
-                {/* Conditional rendering block for suggestions OR "not found" message */}
-                <div className="mt-1"> {/* Wrapper to ensure block flow */}
+                <div className="mt-1"> 
                     {partSearchTerm && (
                         filteredInventoryParts.length > 0 ? (
                             <div className="bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
@@ -485,7 +484,7 @@ export function PurchaseFormDialog({
                         />
                     </div>
                     <div>
-                        <Label htmlFor="currentUnitCostInput">Unit Cost *</Label>
+                        <Label htmlFor="currentUnitCostInput">Unit Cost (₹) *</Label>
                         <Input
                             id="currentUnitCostInput" type="number" value={currentUnitCostInput}
                             onChange={(e) => setCurrentUnitCostInput(e.target.value ? Number(e.target.value) : '')} min="0" step="0.01"
@@ -516,8 +515,8 @@ export function PurchaseFormDialog({
                         <TableCell>{item.partName}</TableCell>
                         <TableCell>{item.partNumber}</TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
-                        <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${(item.quantity * item.unitCost).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">₹{item.unitCost.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">₹{(item.quantity * item.unitCost).toFixed(2)}</TableCell>
                         <TableCell>
                             <Button variant="ghost" size="icon" type="button" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
@@ -533,18 +532,18 @@ export function PurchaseFormDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
             <div>
-                <Label htmlFor="shippingCosts">Shipping Costs</Label>
+                <Label htmlFor="shippingCosts">Shipping Costs (₹)</Label>
                 <Input id="shippingCosts" type="number" {...register("shippingCosts")} placeholder="0.00" step="0.01" />
             </div>
             <div>
-                <Label htmlFor="otherCharges">Other Charges</Label>
+                <Label htmlFor="otherCharges">Other Charges (₹)</Label>
                 <Input id="otherCharges" type="number" {...register("otherCharges")} placeholder="0.00" step="0.01" />
             </div>
             <div className="space-y-1 text-right md:col-start-3">
-                <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">${subTotal.toFixed(2)}</span></p>
-                {numericShipping > 0 && <p className="text-muted-foreground">Shipping: <span className="font-semibold text-foreground">${numericShipping.toFixed(2)}</span></p>}
-                {numericOtherCharges > 0 && <p className="text-muted-foreground">Other: <span className="font-semibold text-foreground">${numericOtherCharges.toFixed(2)}</span></p>}
-                <p className="text-xl font-bold text-foreground">Net Amount: ${netAmount.toFixed(2)}</p>
+                <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">₹{subTotal.toFixed(2)}</span></p>
+                {numericShipping > 0 && <p className="text-muted-foreground">Shipping: <span className="font-semibold text-foreground">₹{numericShipping.toFixed(2)}</span></p>}
+                {numericOtherCharges > 0 && <p className="text-muted-foreground">Other: <span className="font-semibold text-foreground">₹{numericOtherCharges.toFixed(2)}</span></p>}
+                <p className="text-xl font-bold text-foreground">Net Amount: ₹{netAmount.toFixed(2)}</p>
             </div>
         </div>
         <div className="pt-4">

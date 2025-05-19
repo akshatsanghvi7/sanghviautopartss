@@ -178,7 +178,7 @@ export function SaleFormDialog({
   const watchedItems = watch("items");
   const subTotal = watchedItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
   
-  const watchedDiscountValue = watch("discount"); // This can be string, number, or undefined
+  const watchedDiscountValue = watch("discount"); 
   let numericDiscount = 0;
   if (typeof watchedDiscountValue === 'number') {
     numericDiscount = isNaN(watchedDiscountValue) ? 0 : watchedDiscountValue;
@@ -186,7 +186,6 @@ export function SaleFormDialog({
     const parsed = parseFloat(watchedDiscountValue);
     numericDiscount = isNaN(parsed) ? 0 : parsed;
   }
-  // Ensure discount is not negative, consistent with schema min(0)
   numericDiscount = Math.max(0, numericDiscount);
 
   const netAmount = subTotal - numericDiscount;
@@ -194,19 +193,18 @@ export function SaleFormDialog({
   const filteredInventoryParts = inventoryParts.filter(part =>
     part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
     part.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase())
-  ).slice(0, 5); // Limit results for performance
+  ).slice(0, 5); 
 
   const handleFormSubmitInternal: SubmitHandler<SaleFormData> = (data) => {
      if (!data.saleDate) {
       toast({ title: "Sale Date Missing", description: "Please select a sale date.", variant: "destructive" });
       return;
     }
-    // Ensure discount is a number in the submitted data
     const submissionData = {
       ...data,
       discount: numericDiscount,
     };
-    onSubmit(submissionData as SaleFormData & { saleDate: Date }); // Ensure saleDate is a Date for the parent
+    onSubmit(submissionData as SaleFormData & { saleDate: Date }); 
   };
 
   return (
@@ -244,7 +242,7 @@ export function SaleFormDialog({
                 control={control}
                 render={({ field }) => (
                     <DatePicker
-                        date={field.value || undefined} // Pass undefined if null/undefined
+                        date={field.value || undefined} 
                         setDate={(date) => field.onChange(date)}
                     />
                 )}
@@ -300,7 +298,7 @@ export function SaleFormDialog({
                                 className="p-2 hover:bg-accent cursor-pointer"
                                 onClick={() => {
                                     handlePartSearch(part.partNumber);
-                                    setPartSearchTerm(part.partName); // Show name in search box after selection
+                                    setPartSearchTerm(part.partName); 
                                 }}
                             >
                                 {part.partName} ({part.partNumber}) - Stock: {part.quantity}
@@ -351,8 +349,8 @@ export function SaleFormDialog({
                       <TableCell>{item.partName}</TableCell>
                       <TableCell>{item.partNumber}</TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">₹{item.unitPrice.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">₹{(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" type="button" onClick={() => remove(index)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -367,14 +365,14 @@ export function SaleFormDialog({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 border-t pt-4">
             <div className="md:col-start-2">
-              <Label htmlFor="discount">Discount ($)</Label>
+              <Label htmlFor="discount">Discount (₹)</Label>
               <Input id="discount" type="number" {...register("discount")} placeholder="0.00" step="0.01" />
               {errors.discount && <p className="text-sm text-destructive">{errors.discount.message}</p>}
             </div>
             <div className="space-y-1 text-right">
-                <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">${subTotal.toFixed(2)}</span></p>
-                {numericDiscount > 0 && <p className="text-muted-foreground">Discount: <span className="font-semibold text-foreground">-${numericDiscount.toFixed(2)}</span></p>}
-                <p className="text-xl font-bold text-foreground">Net Amount: ${netAmount.toFixed(2)}</p>
+                <p className="text-muted-foreground">Subtotal: <span className="font-semibold text-foreground">₹{subTotal.toFixed(2)}</span></p>
+                {numericDiscount > 0 && <p className="text-muted-foreground">Discount: <span className="font-semibold text-foreground">-₹{numericDiscount.toFixed(2)}</span></p>}
+                <p className="text-xl font-bold text-foreground">Net Amount: ₹{netAmount.toFixed(2)}</p>
             </div>
           </div>
           </ScrollArea>
@@ -390,4 +388,3 @@ export function SaleFormDialog({
     </Dialog>
   );
 }
-

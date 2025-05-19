@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Download, Upload, Search, Edit2, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import type { Part } from '@/lib/types';
 import { PartFormDialog, type PartFormData } from '@/components/inventory/PartFormDialog';
 import { DeletePartDialog } from '@/components/inventory/DeletePartDialog';
@@ -16,11 +16,11 @@ import * as XLSX from 'xlsx';
 import useLocalStorage from '@/hooks/useLocalStorage';
 
 const initialMockParts: Part[] = [
-  { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '$5.99', shelf: 'A1-01' },
-  { partName: 'Oil Filter Z20', partNumber: 'P002', company: 'Mann-Filter', quantity: 80, category: 'Engine', mrp: '$12.50', shelf: 'A1-02' },
-  { partName: 'Brake Pad Set F5', otherName: 'Front Brakes', partNumber: 'P003', company: 'Brembo', quantity: 120, category: 'Brakes', mrp: '$45.00', shelf: 'B2-05' },
-  { partName: 'Headlight Bulb H4', partNumber: 'P004', company: 'Philips', quantity: 200, category: 'Lighting', mrp: '$8.75', shelf: 'C3-10' },
-  { partName: 'Air Filter A300', otherName: 'Engine Air Cleaner', partNumber: 'P005', company: 'K&N', quantity: 95, category: 'Filtration', mrp: '$18.20', shelf: 'A1-03' },
+  { partName: 'Spark Plug X100', otherName: 'Ignition Plug', partNumber: 'P001', company: 'Bosch', quantity: 150, category: 'Engine', mrp: '₹5.99', shelf: 'A1-01' },
+  { partName: 'Oil Filter Z20', partNumber: 'P002', company: 'Mann-Filter', quantity: 80, category: 'Engine', mrp: '₹12.50', shelf: 'A1-02' },
+  { partName: 'Brake Pad Set F5', otherName: 'Front Brakes', partNumber: 'P003', company: 'Brembo', quantity: 120, category: 'Brakes', mrp: '₹45.00', shelf: 'B2-05' },
+  { partName: 'Headlight Bulb H4', partNumber: 'P004', company: 'Philips', quantity: 200, category: 'Lighting', mrp: '₹8.75', shelf: 'C3-10' },
+  { partName: 'Air Filter A300', otherName: 'Engine Air Cleaner', partNumber: 'P005', company: 'K&N', quantity: 95, category: 'Filtration', mrp: '₹18.20', shelf: 'A1-03' },
 ];
 
 // Expected Excel column order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
@@ -32,12 +32,13 @@ export default function InventoryPage() {
   const [mockParts, setMockParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', initialMockParts);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isAddPartDialogOpen, setIsAddPartDialogOpen] = useState(false);
-  const [isEditPartDialogOpen, setIsEditPartDialogOpen] = useState(false);
+  const [isPartFormDialogOpen, setIsPartFormDialogOpen] = useState(false);
   const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
   const [partToEdit, setPartToEdit] = useState<Part | null>(null);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+
 
   const handleImportClick = () => {
     if (fileInputRef.current) {
@@ -85,7 +86,7 @@ export default function InventoryPage() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-        if (jsonData.length < 1) { // No data or only header
+        if (jsonData.length < 1) {
             toast({
                 title: "Empty or invalid file",
                 description: "The Excel file is empty or does not contain valid data rows.",
@@ -94,9 +95,8 @@ export default function InventoryPage() {
             return;
         }
         
-        const headerRow = jsonData[0].map(String); // Convert all header cells to string
+        const headerRow = jsonData[0].map(String); 
         let startIndex = 0;
-        // Basic header check: if the first row looks like our expected headers, skip it
         const isHeaderPresent = expectedColumns.every((col, index) => headerRow[index]?.trim().toLowerCase() === col.trim().toLowerCase());
 
         if (isHeaderPresent) {
@@ -112,80 +112,85 @@ export default function InventoryPage() {
             return;
         }
 
+        let addedCount = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
 
-        const importedParts: Part[] = [];
-        for (let i = startIndex; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || row.length < expectedColumns.length) {
-            console.warn(`Skipping malformed row ${i + 1}: Expected ${expectedColumns.length} columns, got ${row?.length || 0}. Row data: ${row}`);
-            continue;
+        setMockParts(prevParts => {
+          const newPartsList = [...prevParts];
+          
+          for (let i = startIndex; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row || row.length < expectedColumns.length) {
+              console.warn(`Skipping malformed row ${i + 1}: Expected ${expectedColumns.length} columns, got ${row?.length || 0}. Row data: ${row}`);
+              skippedCount++;
+              continue;
+            }
+            const [
+              partNameVal, otherNameVal, partNumberVal, companyVal,
+              quantityStrVal, categoryVal, mrpVal, shelfVal
+            ] = row.map(cell => cell !== null && cell !== undefined ? String(cell).trim() : '');
+
+            const quantity = parseInt(quantityStrVal, 10);
+
+            if (isNaN(quantity)) {
+              console.warn(`Skipping row ${i + 1} due to invalid quantity: ${quantityStrVal}`);
+              skippedCount++;
+              continue;
+            }
+            if (!partNumberVal || !partNameVal) {
+              console.warn(`Skipping row ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
+              skippedCount++;
+              continue;
+            }
+            
+            const mrpString = typeof mrpVal === 'number' ? `₹${mrpVal.toFixed(2)}` : (String(mrpVal).startsWith('₹') ? String(mrpVal) : `₹${String(mrpVal)}`);
+
+            const existingPartIndex = newPartsList.findIndex(p => p.partNumber === partNumberVal);
+
+            if (existingPartIndex !== -1) {
+              // Part exists, update it
+              const existingPart = newPartsList[existingPartIndex];
+              existingPart.partName = partNameVal;
+              existingPart.otherName = otherNameVal || undefined;
+              existingPart.company = companyVal || undefined;
+              existingPart.quantity += quantity; // Add to existing quantity
+              existingPart.category = categoryVal;
+              existingPart.mrp = mrpString;
+              existingPart.shelf = shelfVal || undefined;
+              updatedCount++;
+            } else {
+              // Part does not exist, add new
+              newPartsList.push({
+                partName: partNameVal,
+                otherName: otherNameVal || undefined,
+                partNumber: partNumberVal,
+                company: companyVal || undefined,
+                quantity,
+                category: categoryVal,
+                mrp: mrpString,
+                shelf: shelfVal || undefined,
+              });
+              addedCount++;
+            }
           }
-          // Expected order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
-          const [
-            partNameVal,      // values[0]
-            otherNameVal,     // values[1]
-            partNumberVal,    // values[2]
-            companyVal,       // values[3]
-            quantityStrVal,   // values[4]
-            categoryVal,      // values[5]
-            mrpVal,           // values[6]
-            shelfVal          // values[7]
-          ] = row.map(cell => cell !== null && cell !== undefined ? String(cell).trim() : '');
-
-
-          const quantity = parseInt(quantityStrVal, 10);
-
-          if (isNaN(quantity)) {
-            console.warn(`Skipping row ${i + 1} due to invalid quantity: ${quantityStrVal}`);
-            continue;
-          }
-
-          if (!partNumberVal || !partNameVal) {
-            console.warn(`Skipping row ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
-            continue;
-          }
-
-          importedParts.push({
-            partName: partNameVal,
-            otherName: otherNameVal || undefined,
-            partNumber: partNumberVal,
-            company: companyVal || undefined,
-            quantity,
-            category: categoryVal,
-            mrp: typeof mrpVal === 'number' ? `$${mrpVal.toFixed(2)}` : (mrpVal.startsWith('$') || mrpVal.startsWith('₹') ? mrpVal : `$${mrpVal}`),
-            shelf: shelfVal || undefined,
-          });
-        }
+          return newPartsList;
+        });
         
-        if (importedParts.length === 0 && jsonData.length > startIndex) {
-            toast({
-                title: "No valid parts found",
-                description: `The Excel file might be empty or incorrectly formatted. Expected columns in order: ${expectedColumns.join(', ')}. Ensure all ${expectedColumns.length} columns are present.`,
+        if (addedCount === 0 && updatedCount === 0 && jsonData.length > startIndex) {
+             toast({
+                title: "No valid parts processed",
+                description: `The Excel file might be empty, incorrectly formatted, or all parts caused issues. Expected columns: ${expectedColumns.join(', ')}.`,
                 variant: "destructive",
                 duration: 9000,
             });
-            return;
+        } else {
+            toast({
+              title: "Import Complete",
+              description: `${addedCount} new parts added. ${updatedCount} parts updated. ${skippedCount} rows skipped.`,
+              duration: 7000,
+            });
         }
-        
-        let uniqueNewPartsCount = 0;
-        setMockParts(prevParts => {
-          const existingPartNumbers = new Set(prevParts.map(p => p.partNumber));
-          const uniqueNewParts = importedParts.filter(np => {
-            if(existingPartNumbers.has(np.partNumber)) {
-                console.warn(`Part number ${np.partNumber} already exists. Skipping.`);
-                return false;
-            }
-            return true;
-          });
-          uniqueNewPartsCount = uniqueNewParts.length;
-          return [...prevParts, ...uniqueNewParts];
-        });
-
-        toast({
-          title: "Import Successful",
-          description: `${jsonData.length - startIndex} rows processed. ${uniqueNewPartsCount} new unique parts added. ${importedParts.length - uniqueNewPartsCount} parts were duplicates or had issues and were skipped.`,
-          duration: 7000,
-        });
 
       } catch (error) {
         console.error("Error parsing Excel file:", error);
@@ -197,7 +202,7 @@ export default function InventoryPage() {
         });
       } finally {
         if (fileInputRef.current) {
-            fileInputRef.current.value = ""; // Reset file input
+            fileInputRef.current.value = ""; 
         }
       }
     };
@@ -208,7 +213,7 @@ export default function InventoryPage() {
           variant: "destructive",
         });
          if (fileInputRef.current) {
-            fileInputRef.current.value = ""; // Reset file input
+            fileInputRef.current.value = ""; 
         }
     };
     reader.readAsArrayBuffer(file);
@@ -225,7 +230,7 @@ export default function InventoryPage() {
     }
     
     const dataToExport = [
-      expectedColumns, // Header row
+      expectedColumns,
       ...mockParts.map(part => [
         part.partName || '',
         part.otherName || '',
@@ -258,39 +263,56 @@ export default function InventoryPage() {
     }
   };
 
+const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) => {
+    setMockParts(prevParts => {
+        const newPartsList = [...prevParts];
+        const existingPartIndex = newPartsList.findIndex(p => p.partNumber === (originalPartNumber || data.partNumber));
 
-  const handleAddPartSubmit = (data: PartFormData) => {
-    const newPart: Part = { ...data };
-    setMockParts(prevParts => [...prevParts, newPart]);
-    toast({
-      title: "Part Added",
-      description: `${data.partName} has been added to the inventory.`,
+        if (formMode === 'edit' && originalPartNumber) { // Editing existing part
+            if (existingPartIndex !== -1) {
+                newPartsList[existingPartIndex] = {
+                    ...newPartsList[existingPartIndex], // keep original partNumber if it was disabled in form
+                    ...data,
+                    partNumber: originalPartNumber, // Ensure part number isn't changed by edit
+                };
+                toast({ title: "Part Updated", description: `${data.partName} has been updated.` });
+            }
+        } else { // Adding new part or updating based on part number if it exists
+            if (existingPartIndex !== -1) { // Part with this number already exists
+                const existingPart = newPartsList[existingPartIndex];
+                existingPart.partName = data.partName;
+                existingPart.otherName = data.otherName;
+                existingPart.company = data.company;
+                existingPart.quantity = data.quantity; // Replace quantity
+                existingPart.category = data.category;
+                existingPart.mrp = data.mrp.startsWith('₹') ? data.mrp : `₹${data.mrp}`;
+                existingPart.shelf = data.shelf;
+                toast({ title: "Part Updated", description: `Details for ${data.partNumber} have been updated.` });
+            } else { // New part number
+                newPartsList.push({
+                    ...data,
+                    mrp: data.mrp.startsWith('₹') ? data.mrp : `₹${data.mrp}`,
+                });
+                toast({ title: "Part Added", description: `${data.partName} has been added.` });
+            }
+        }
+        return newPartsList;
     });
-  };
-
-  const handleEditPartSubmit = (data: PartFormData, originalPartNumber?: string) => {
-    if (!originalPartNumber) return; 
-
-    setMockParts(prevParts =>
-      prevParts.map(part =>
-        part.partNumber === originalPartNumber ? { ...part, ...data, partNumber: originalPartNumber } : part
-      )
-    );
-    toast({
-      title: "Part Updated",
-      description: `${data.partName} has been updated.`,
-    });
+    setIsPartFormDialogOpen(false);
     setPartToEdit(null);
-  };
+};
+
 
   const openAddPartDialog = () => {
+    setFormMode('add');
     setPartToEdit(null);
-    setIsAddPartDialogOpen(true);
+    setIsPartFormDialogOpen(true);
   };
 
   const openEditPartDialog = (part: Part) => {
+    setFormMode('edit');
     setPartToEdit(part);
-    setIsEditPartDialogOpen(true);
+    setIsPartFormDialogOpen(true);
   };
 
   const openDeleteConfirmDialog = (part: Part) => {
@@ -356,6 +378,7 @@ export default function InventoryPage() {
               Browse, search, and manage your inventory parts. For Excel import, use columns in this order: 
               {expectedColumns.join(', ')}. 
               The first row can optionally be headers. All {expectedColumns.length} columns must be present for data rows, even if optional fields are empty.
+              If importing a part with an existing Part Number, its details (including MRP) will be updated and quantity will be added. New Part Numbers will be added.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -383,8 +406,8 @@ export default function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredParts.map((part) => (
-                  <TableRow key={part.partNumber}>
+                {filteredParts.map((part, index) => ( // Added index for a more unique key if needed
+                  <TableRow key={`${part.partNumber}-${index}`}> 
                     <TableCell className="font-medium">{part.partName}</TableCell>
                     <TableCell>{part.otherName || '-'}</TableCell>
                     <TableCell>{part.partNumber}</TableCell>
@@ -416,19 +439,22 @@ export default function InventoryPage() {
         </Card>
       </div>
       <PartFormDialog
-        isOpen={isAddPartDialogOpen}
-        onOpenChange={setIsAddPartDialogOpen}
-        onSubmit={handleAddPartSubmit}
-        dialogTitle="Add New Part"
+        isOpen={isPartFormDialogOpen}
+        onOpenChange={setIsPartFormDialogOpen}
+        onSubmit={handlePartFormSubmit}
+        initialData={partToEdit}
+        dialogTitle={formMode === 'add' ? 'Add New Part' : 'Edit Part'}
+        formMode={formMode}
         existingPartNumbers={mockParts.map(p => p.partNumber)}
       />
-      {partToEdit && (
+      {partToEdit && formMode === 'edit' && ( // Conditionally render edit dialog only when partToEdit is set for editing
         <PartFormDialog
-          isOpen={isEditPartDialogOpen}
-          onOpenChange={setIsEditPartDialogOpen}
-          onSubmit={handleEditPartSubmit}
+          isOpen={isPartFormDialogOpen && formMode === 'edit'}
+          onOpenChange={setIsPartFormDialogOpen}
+          onSubmit={handlePartFormSubmit}
           initialData={partToEdit}
           dialogTitle="Edit Part"
+          formMode="edit"
           existingPartNumbers={mockParts.map(p => p.partNumber).filter(pn => pn !== partToEdit.partNumber)}
         />
       )}
@@ -443,4 +469,3 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
-

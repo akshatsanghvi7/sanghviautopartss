@@ -118,8 +118,8 @@ export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }:
                       <p className="text-xs text-muted-foreground">{item.partNumber}</p>
                     </TableCell>
                     <TableCell className="text-right">{item.quantityPurchased}</TableCell>
-                    <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">${item.itemTotal.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{item.unitCost.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{item.itemTotal.toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -130,24 +130,24 @@ export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }:
               <div className="w-full max-w-xs space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">${purchaseOrder.subTotal.toFixed(2)}</span>
+                  <span className="font-medium">₹{purchaseOrder.subTotal.toFixed(2)}</span>
                 </div>
                 {purchaseOrder.shippingCosts !== undefined && purchaseOrder.shippingCosts > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping Costs:</span>
-                    <span className="font-medium">${purchaseOrder.shippingCosts.toFixed(2)}</span>
+                    <span className="font-medium">₹{purchaseOrder.shippingCosts.toFixed(2)}</span>
                   </div>
                 )}
                 {purchaseOrder.otherCharges !== undefined && purchaseOrder.otherCharges > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Other Charges:</span>
-                    <span className="font-medium">${purchaseOrder.otherCharges.toFixed(2)}</span>
+                    <span className="font-medium">₹{purchaseOrder.otherCharges.toFixed(2)}</span>
                   </div>
                 )}
                  <Separator />
                 <div className="flex justify-between text-lg font-bold">
                   <span className="text-primary">Net Amount:</span>
-                  <span className="text-primary">${purchaseOrder.netAmount.toFixed(2)}</span>
+                  <span className="text-primary">₹{purchaseOrder.netAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
