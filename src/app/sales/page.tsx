@@ -18,15 +18,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Sale, Part, SaleItem } from '@/lib/types';
+import type { Sale, Part, SaleItem, Customer } from '@/lib/types';
 import { SaleFormDialog, type SaleFormData } from '@/components/sales/SaleFormDialog';
 import { InvoiceViewDialog } from '@/components/sales/InvoiceViewDialog';
 import { format } from 'date-fns';
 
 // Initial mock sales data if localStorage is empty
 const initialMockSales: Sale[] = [
-  { id: 'S001', date: new Date('2024-07-15T10:00:00Z').toISOString(), buyerName: 'John Doe', items: [{ partNumber: 'P001', partName: 'Spark Plug', quantitySold: 2, unitPrice: 5.99, itemTotal: 11.98 }], subTotal: 11.98, netAmount: 11.98, paymentType: 'cash', gstNumber: 'GST123', contactDetails: '555-1234', emailAddress: 'john@example.com' },
-  { id: 'S002', date: new Date('2024-07-14T11:30:00Z').toISOString(), buyerName: 'Jane Smith', items: [{ partNumber: 'P002', partName: 'Oil Filter', quantitySold: 1, unitPrice: 12.50, itemTotal: 12.50 }], subTotal: 12.50, netAmount: 12.50, paymentType: 'credit', discount: 0 },
+  { id: 'S001', date: new Date('2024-07-15T10:00:00Z').toISOString(), buyerName: 'John Doe', emailAddress: 'john.doe@example.com', contactDetails: '555-1234', items: [{ partNumber: 'P001', partName: 'Spark Plug', quantitySold: 2, unitPrice: 5.99, itemTotal: 11.98 }], subTotal: 11.98, netAmount: 11.98, paymentType: 'cash', gstNumber: 'GST123' },
+  { id: 'S002', date: new Date('2024-07-14T11:30:00Z').toISOString(), buyerName: 'Jane Smith', emailAddress: 'jane.smith@example.com', contactDetails: '555-5678', items: [{ partNumber: 'P002', partName: 'Oil Filter', quantitySold: 1, unitPrice: 12.50, itemTotal: 12.50 }], subTotal: 12.50, netAmount: 12.50, paymentType: 'credit', discount: 0 },
 ];
 
 
@@ -35,6 +35,8 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sales, setSales] = useLocalStorage<Sale[]>('autocentral-sales', initialMockSales);
   const [inventoryParts, setInventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []);
+  const [customers, setCustomers] = useLocalStorage<Customer[]>('autocentral-customers', []);
+
 
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false);
   const [isInvoiceViewOpen, setIsInvoiceViewOpen] = useState(false);
@@ -80,6 +82,25 @@ export default function SalesPage() {
     setInventoryParts(updatedInventory);
 
     setSales(prevSales => [newSale, ...prevSales]);
+    
+    // Add/Update customer
+    const existingCustomer = customers.find(c => c.name.toLowerCase() === newSale.buyerName.toLowerCase());
+    if (!existingCustomer) {
+      const newCustomer: Customer = {
+        id: `CUST${Date.now().toString().slice(-5)}`,
+        name: newSale.buyerName,
+        email: newSale.emailAddress,
+        phone: newSale.contactDetails,
+        balance: '$0.00', // Default balance for new customer
+      };
+      setCustomers(prevCustomers => [newCustomer, ...prevCustomers]);
+      toast({
+        title: "New Customer Added",
+        description: `${newCustomer.name} has been added to the customer list.`,
+      });
+    }
+
+
     toast({
       title: "Sale Recorded",
       description: `Sale ID ${newSale.id} for ${newSale.buyerName} has been recorded.`,
@@ -90,21 +111,13 @@ export default function SalesPage() {
   const handleViewBillClick = (sale: Sale) => {
     setSelectedSaleForInvoice(sale);
     setIsInvoiceViewOpen(true);
-    if (sale.emailAddress) {
-        // Simulate mailing
-        toast({
-            title: "Invoice Mailed (Simulated)",
-            description: `Invoice for Sale ID: ${sale.id} would be mailed to ${sale.emailAddress}.`
-        })
-    }
+    // Mailing simulation moved to InvoiceViewDialog
   };
 
   const filteredSales = sales.filter(sale =>
     (sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sale.buyerName.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    // Basic status filtering logic (can be expanded)
-    ( (statusFilters.paid && (sale.paymentType === 'cash' || sale.paymentType === 'credit')) ) // Simplified for now
-    // Add more conditions if other statuses like pending/overdue are implemented
+    ( (statusFilters.paid && (sale.paymentType === 'cash' || sale.paymentType === 'credit')) ) 
   );
 
   const handleStatusFilterChange = (statusKey: keyof typeof statusFilters, checked: boolean) => {

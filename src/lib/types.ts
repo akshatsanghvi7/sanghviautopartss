@@ -71,13 +71,17 @@ export type Purchase = {
 export type Customer = {
   id: string;
   name: string;
-  contactInfo?: string;
-  balanceDue: number;
+  email?: string;
+  phone?: string;
+  balance: string; // Keeping as string for display, e.g., "$0.00"
 };
 
 export type Supplier = {
   id: string;
   name: string;
-  contactInfo?: string;
-  balanceOwed: number;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  balance: string; // e.g. "$1200.00 (Owed)" or "$0.00"
 };
+

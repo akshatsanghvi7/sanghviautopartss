@@ -18,7 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Purchase, Part } from '@/lib/types';
+import type { Purchase, Part, Supplier } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
 import { format } from 'date-fns';
 
@@ -29,6 +29,7 @@ export default function PurchasesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [purchases, setPurchases] = useLocalStorage<Purchase[]>('autocentral-purchases', initialMockPurchases);
   const [inventoryParts, setInventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []);
+  const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>('autocentral-suppliers', []);
 
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false);
   
@@ -38,7 +39,7 @@ export default function PurchasesPage() {
     Ordered: true,
     'Partially Received': true,
     Received: true,
-    Cancelled: false, // Example: initially don't show cancelled
+    Cancelled: false, 
   });
 
 
@@ -75,6 +76,24 @@ export default function PurchasesPage() {
     setInventoryParts(updatedInventory);
 
     setPurchases(prevPurchases => [newPurchase, ...prevPurchases]);
+
+    // Add/Update supplier
+    const existingSupplier = suppliers.find(s => s.name.toLowerCase() === newPurchase.supplierName.toLowerCase());
+    if (!existingSupplier) {
+      const newSupplier: Supplier = {
+        id: `SUP${Date.now().toString().slice(-5)}`,
+        name: newPurchase.supplierName,
+        balance: '$0.00', // Default balance
+        // Contact details are not in PurchaseFormData, so they'd be undefined here
+        // Could be enhanced by adding more supplier fields to PurchaseForm
+      };
+      setSuppliers(prevSuppliers => [newSupplier, ...prevSuppliers]);
+      toast({
+        title: "New Supplier Added",
+        description: `${newSupplier.name} has been added to the supplier list.`,
+      });
+    }
+
     toast({
       title: "Purchase Order Recorded",
       description: `PO ID ${newPurchase.id} from ${newPurchase.supplierName} has been recorded.`,
@@ -101,7 +120,7 @@ export default function PurchasesPage() {
       case 'Ordered':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
       case 'Partially Received':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; // Using orange, ensure defined in theme or use tailwind default
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; 
       case 'Cancelled':
         return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
       default:
