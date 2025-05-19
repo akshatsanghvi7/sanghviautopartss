@@ -58,13 +58,20 @@ export function SupplierPurchaseHistoryDialog({
     }
   };
 
+  const getPaymentStatus = (paymentType: Purchase['paymentType']): { text: string; className: string } => {
+    if (paymentType === 'on_credit') {
+      return { text: 'Due', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' };
+    }
+    return { text: 'Paid', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Purchase History for {supplier.name}</DialogTitle>
           <DialogDescription>
-            Review all purchase orders associated with this supplier.
+            Review all purchase orders associated with this supplier. Balances owed are updated based on 'On Credit' purchases.
           </DialogDescription>
         </DialogHeader>
 
@@ -76,22 +83,31 @@ export function SupplierPurchaseHistoryDialog({
                   <TableHead>PO ID</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Net Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Order Status</TableHead>
+                  <TableHead>Payment Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {supplierPurchases.map((purchase) => (
-                  <TableRow key={purchase.id}>
-                    <TableCell className="font-medium">{purchase.id}</TableCell>
-                    <TableCell>{format(new Date(purchase.date), "PP")}</TableCell>
-                    <TableCell className="text-right">${purchase.netAmount.toFixed(2)}</TableCell>
-                    <TableCell>
-                        <span className={cn("px-2 py-1 text-xs font-medium rounded-full", getStatusColor(purchase.status))}>
-                            {purchase.status}
-                        </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {supplierPurchases.map((purchase) => {
+                  const paymentStatus = getPaymentStatus(purchase.paymentType);
+                  return (
+                    <TableRow key={purchase.id}>
+                      <TableCell className="font-medium">{purchase.id}</TableCell>
+                      <TableCell>{format(new Date(purchase.date), "PP")}</TableCell>
+                      <TableCell className="text-right">${purchase.netAmount.toFixed(2)}</TableCell>
+                      <TableCell>
+                          <span className={cn("px-2 py-1 text-xs font-medium rounded-full", getStatusColor(purchase.status))}>
+                              {purchase.status}
+                          </span>
+                      </TableCell>
+                      <TableCell>
+                          <span className={cn("px-2 py-1 text-xs font-medium rounded-full", paymentStatus.className)}>
+                              {paymentStatus.text}
+                          </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           ) : (
