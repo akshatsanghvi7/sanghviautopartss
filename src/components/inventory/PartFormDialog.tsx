@@ -37,11 +37,10 @@ export type PartFormData = z.infer<typeof partSchema>;
 interface PartFormDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: PartFormData, originalPartNumber?: string) => void;
-  initialData?: Part | null;
+  onSubmit: (data: PartFormData, originalPart?: Part) => void; // Pass originalPart for edit context
+  initialData?: Part | null; // This is the original Part object for editing
   dialogTitle: string;
   formMode: 'add' | 'edit';
-  existingPartNumbers: string[]; // Still useful for edit mode to prevent changing to another existing number if needed
 }
 
 export function PartFormDialog({
@@ -51,7 +50,6 @@ export function PartFormDialog({
   initialData,
   dialogTitle,
   formMode,
-  existingPartNumbers, 
 }: PartFormDialogProps) {
   const { toast } = useToast();
   const {
@@ -60,23 +58,42 @@ export function PartFormDialog({
     reset,
     formState: { errors },
     setValue,
-    setError, // We might not need setError for partNumber uniqueness here anymore
   } = useForm<PartFormData>({
     resolver: zodResolver(partSchema),
   });
+
+  const formatMrpForDisplay = (mrpString?: string): string => {
+    if (!mrpString) return "";
+    // If it already starts with ₹, use as is, otherwise prepend and format
+    if (mrpString.startsWith('₹')) {
+      return mrpString;
+    }
+    const numericValue = parseFloat(mrpString.replace(/[^0-9.-]+/g, ""));
+    return isNaN(numericValue) ? "" : `₹${numericValue.toFixed(2)}`;
+  };
+  
+  const formatMrpForStorage = (mrpString: string): string => {
+    if (mrpString.startsWith('₹')) {
+        const numericValue = parseFloat(mrpString.substring(1));
+        return isNaN(numericValue) ? '₹0.00' : `₹${numericValue.toFixed(2)}`;
+    }
+    const numericValue = parseFloat(mrpString);
+    return isNaN(numericValue) ? '₹0.00' : `₹${numericValue.toFixed(2)}`;
+  };
+
 
   useEffect(() => {
     if (isOpen) {
       if (formMode === 'edit' && initialData) {
         setValue("partName", initialData.partName);
         setValue("otherName", initialData.otherName || "");
-        setValue("partNumber", initialData.partNumber);
+        setValue("partNumber", initialData.partNumber); // PartNumber is disabled for edit
         setValue("company", initialData.company || "");
         setValue("quantity", initialData.quantity);
         setValue("category", initialData.category);
-        setValue("mrp", initialData.mrp);
+        setValue("mrp", initialData.mrp); // MRP is disabled for edit
         setValue("shelf", initialData.shelf || "");
-      } else { // For 'add' mode or if initialData is not available for edit
+      } else { 
         reset({
           partName: "",
           otherName: "",
@@ -92,17 +109,11 @@ export function PartFormDialog({
   }, [initialData, reset, setValue, isOpen, formMode]);
 
   const handleFormSubmitInternal: SubmitHandler<PartFormData> = (data) => {
-    // Uniqueness for partNumber is now handled by the parent component's submit logic (add or update)
-    // If formMode is 'add' and partNumber is intended to be unique globally, that check happens in InventoryPage
-    // If formMode is 'edit', partNumber might be disabled or its change handled specially.
-    // For now, we directly pass the data, assuming InventoryPage handles merging/updating.
-    
-    let formattedMrp = data.mrp;
-    if (!formattedMrp.startsWith('₹')) {
-        formattedMrp = `₹${parseFloat(formattedMrp).toFixed(2)}`;
-    }
-    
-    onSubmit({ ...data, mrp: formattedMrp }, initialData?.partNumber);
+    const submittedDataWithFormattedMrp = {
+      ...data,
+      mrp: formatMrpForStorage(data.mrp),
+    };
+    onSubmit(submittedDataWithFormattedMrp, initialData || undefined); // Pass initialData as originalPart
     reset(); 
     onOpenChange(false); 
   };
@@ -116,7 +127,8 @@ export function PartFormDialog({
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>
-            {formMode === 'edit' ? "Edit the details of the part." : "Enter the details for the new part. If Part Number exists, it will be updated."}
+            {formMode === 'edit' ? "Edit details for this part entry. Part Number and MRP cannot be changed." : 
+            "Enter details. If Part Number and MRP match an existing entry, it will be updated. Otherwise, a new entry is created."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="space-y-4">
@@ -156,8 +168,9 @@ export function PartFormDialog({
             </div>
              <div className="space-y-1">
               <Label htmlFor="mrp">MRP</Label>
-              <Input id="mrp" {...register("mrp")} placeholder="₹0.00" />
+              <Input id="mrp" {...register("mrp")} placeholder="₹0.00" disabled={formMode === 'edit'} />
               {errors.mrp && <p className="text-sm text-destructive">{errors.mrp.message}</p>}
+              {formMode === 'edit' && <p className="text-xs text-muted-foreground mt-1">MRP cannot be changed during edit.</p>}
             </div>
           </div>
           <div className="space-y-1">
@@ -168,10 +181,12 @@ export function PartFormDialog({
             <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
               Cancel
             </Button>
-            <Button type="submit">{formMode === 'edit' ? "Save Changes" : "Add/Update Part"}</Button>
+            <Button type="submit">{formMode === 'edit' ? "Save Changes" : "Add/Update Part Entry"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
+
+    

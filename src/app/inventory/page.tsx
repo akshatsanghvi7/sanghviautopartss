@@ -21,9 +21,10 @@ const initialMockParts: Part[] = [
   { partName: 'Brake Pad Set F5', otherName: 'Front Brakes', partNumber: 'P003', company: 'Brembo', quantity: 120, category: 'Brakes', mrp: '₹45.00', shelf: 'B2-05' },
   { partName: 'Headlight Bulb H4', partNumber: 'P004', company: 'Philips', quantity: 200, category: 'Lighting', mrp: '₹8.75', shelf: 'C3-10' },
   { partName: 'Air Filter A300', otherName: 'Engine Air Cleaner', partNumber: 'P005', company: 'K&N', quantity: 95, category: 'Filtration', mrp: '₹18.20', shelf: 'A1-03' },
+  { partName: 'Spark Plug X100', otherName: 'Ignition Plug Alt', partNumber: 'P001', company: 'Bosch', quantity: 50, category: 'Engine', mrp: '₹6.50', shelf: 'A1-04' },
 ];
 
-// Expected Excel column order: Part Name, Other Name, Part Number, Company, Qty, Category, MRP, Shelf
+// Expected Excel column order
 const expectedColumns = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
 
 
@@ -39,6 +40,14 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
 
+  const formatMrp = (mrpString: string | number): string => {
+    if (typeof mrpString === 'number') {
+      return `₹${mrpString.toFixed(2)}`;
+    }
+    const numericValue = parseFloat(String(mrpString).replace(/[^0-9.-]+/g,""));
+    if (isNaN(numericValue)) return '₹0.00'; // Or handle error
+    return `₹${numericValue.toFixed(2)}`;
+  };
 
   const handleImportClick = () => {
     if (fileInputRef.current) {
@@ -128,39 +137,39 @@ export default function InventoryPage() {
             }
             const [
               partNameVal, otherNameVal, partNumberVal, companyVal,
-              quantityStrVal, categoryVal, mrpVal, shelfVal
+              quantityStrVal, categoryVal, mrpValExcel, shelfVal
             ] = row.map(cell => cell !== null && cell !== undefined ? String(cell).trim() : '');
 
             const quantity = parseInt(quantityStrVal, 10);
+            const formattedMrpFromExcel = formatMrp(mrpValExcel);
+
 
             if (isNaN(quantity)) {
               console.warn(`Skipping row ${i + 1} due to invalid quantity: ${quantityStrVal}`);
               skippedCount++;
               continue;
             }
-            if (!partNumberVal || !partNameVal) {
-              console.warn(`Skipping row ${i + 1} due to missing Part Number or Part Name (Part Number: ${partNumberVal}, Part Name: ${partNameVal}).`);
+            if (!partNumberVal || !partNameVal || !mrpValExcel) {
+              console.warn(`Skipping row ${i + 1} due to missing Part Number, Part Name, or MRP (Part Number: ${partNumberVal}, Part Name: ${partNameVal}, MRP: ${mrpValExcel}).`);
               skippedCount++;
               continue;
             }
             
-            const mrpString = typeof mrpVal === 'number' ? `₹${mrpVal.toFixed(2)}` : (String(mrpVal).startsWith('₹') ? String(mrpVal) : `₹${String(mrpVal)}`);
-
-            const existingPartIndex = newPartsList.findIndex(p => p.partNumber === partNumberVal);
+            const existingPartIndex = newPartsList.findIndex(p => p.partNumber === partNumberVal && p.mrp === formattedMrpFromExcel);
 
             if (existingPartIndex !== -1) {
-              // Part exists, update it
+              // Part with same partNumber and MRP exists, update it
               const existingPart = newPartsList[existingPartIndex];
               existingPart.partName = partNameVal;
               existingPart.otherName = otherNameVal || undefined;
               existingPart.company = companyVal || undefined;
               existingPart.quantity += quantity; // Add to existing quantity
               existingPart.category = categoryVal;
-              existingPart.mrp = mrpString;
+              // MRP is already matched, so no change needed. Shelf updated.
               existingPart.shelf = shelfVal || undefined;
               updatedCount++;
             } else {
-              // Part does not exist, add new
+              // Part does not exist with this partNumber + MRP combination, add new
               newPartsList.push({
                 partName: partNameVal,
                 otherName: otherNameVal || undefined,
@@ -168,7 +177,7 @@ export default function InventoryPage() {
                 company: companyVal || undefined,
                 quantity,
                 category: categoryVal,
-                mrp: mrpString,
+                mrp: formattedMrpFromExcel,
                 shelf: shelfVal || undefined,
               });
               addedCount++;
@@ -180,14 +189,14 @@ export default function InventoryPage() {
         if (addedCount === 0 && updatedCount === 0 && jsonData.length > startIndex) {
              toast({
                 title: "No valid parts processed",
-                description: `The Excel file might be empty, incorrectly formatted, or all parts caused issues. Expected columns: ${expectedColumns.join(', ')}.`,
+                description: `The Excel file might be empty, incorrectly formatted, or all parts caused issues. Expected columns: ${expectedColumns.join(', ')}. All ${expectedColumns.length} columns must be present.`,
                 variant: "destructive",
                 duration: 9000,
             });
         } else {
             toast({
               title: "Import Complete",
-              description: `${addedCount} new parts added. ${updatedCount} parts updated. ${skippedCount} rows skipped.`,
+              description: `${addedCount} new part entries added. ${updatedCount} existing part entries updated. ${skippedCount} rows skipped.`,
               duration: 7000,
             });
         }
@@ -238,7 +247,7 @@ export default function InventoryPage() {
         part.company || '',
         part.quantity,
         part.category || '',
-        part.mrp || '',
+        part.mrp || '', // Already formatted
         part.shelf || '',
       ])
     ];
@@ -263,37 +272,58 @@ export default function InventoryPage() {
     }
   };
 
-const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) => {
+const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
+    const formattedNewMrp = formatMrp(data.mrp); // MRP from form
+
     setMockParts(prevParts => {
         const newPartsList = [...prevParts];
-        const existingPartIndex = newPartsList.findIndex(p => p.partNumber === (originalPartNumber || data.partNumber));
 
-        if (formMode === 'edit' && originalPartNumber) { // Editing existing part
+        if (formMode === 'edit' && originalPart) {
+            // Editing existing part. PartNumber and MRP are not changed by the form.
+            const existingPartIndex = newPartsList.findIndex(
+                p => p.partNumber === originalPart.partNumber && p.mrp === originalPart.mrp
+            );
             if (existingPartIndex !== -1) {
                 newPartsList[existingPartIndex] = {
-                    ...newPartsList[existingPartIndex], // keep original partNumber if it was disabled in form
-                    ...data,
-                    partNumber: originalPartNumber, // Ensure part number isn't changed by edit
+                    ...newPartsList[existingPartIndex], // Keep original partNumber & MRP
+                    partName: data.partName,
+                    otherName: data.otherName || undefined,
+                    company: data.company || undefined,
+                    quantity: data.quantity, // Replace quantity
+                    category: data.category,
+                    shelf: data.shelf || undefined,
                 };
-                toast({ title: "Part Updated", description: `${data.partName} has been updated.` });
+                toast({ title: "Part Updated", description: `${data.partName} (MRP: ${originalPart.mrp}) has been updated.` });
+            } else {
+                toast({ title: "Update Error", description: "Original part not found for editing.", variant: "destructive" });
+                return prevParts; // Should not happen if originalPart is valid
             }
-        } else { // Adding new part or updating based on part number if it exists
-            if (existingPartIndex !== -1) { // Part with this number already exists
+        } else { // Adding new part (or potentially updating if partNumber + MRP combo exists from 'add' mode)
+            const existingPartIndex = newPartsList.findIndex(
+                p => p.partNumber === data.partNumber && p.mrp === formattedNewMrp
+            );
+
+            if (existingPartIndex !== -1) { // Part with this partNumber AND MRP already exists
                 const existingPart = newPartsList[existingPartIndex];
                 existingPart.partName = data.partName;
-                existingPart.otherName = data.otherName;
-                existingPart.company = data.company;
+                existingPart.otherName = data.otherName || undefined;
+                existingPart.company = data.company || undefined;
                 existingPart.quantity = data.quantity; // Replace quantity
                 existingPart.category = data.category;
-                existingPart.mrp = data.mrp.startsWith('₹') ? data.mrp : `₹${data.mrp}`;
-                existingPart.shelf = data.shelf;
-                toast({ title: "Part Updated", description: `Details for ${data.partNumber} have been updated.` });
-            } else { // New part number
+                existingPart.shelf = data.shelf || undefined;
+                toast({ title: "Part Details Updated", description: `Details for ${data.partNumber} (MRP: ${formattedNewMrp}) have been updated.` });
+            } else { // New part number OR new MRP for existing part number -> Add as new entry
                 newPartsList.push({
-                    ...data,
-                    mrp: data.mrp.startsWith('₹') ? data.mrp : `₹${data.mrp}`,
+                    partName: data.partName,
+                    otherName: data.otherName || undefined,
+                    partNumber: data.partNumber,
+                    company: data.company || undefined,
+                    quantity: data.quantity,
+                    category: data.category,
+                    mrp: formattedNewMrp,
+                    shelf: data.shelf || undefined,
                 });
-                toast({ title: "Part Added", description: `${data.partName} has been added.` });
+                toast({ title: "New Part Entry Added", description: `${data.partName} (MRP: ${formattedNewMrp}) has been added.` });
             }
         }
         return newPartsList;
@@ -311,7 +341,7 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
 
   const openEditPartDialog = (part: Part) => {
     setFormMode('edit');
-    setPartToEdit(part);
+    setPartToEdit(part); // partToEdit now holds the original part object
     setIsPartFormDialogOpen(true);
   };
 
@@ -322,10 +352,12 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
 
   const confirmDeletePart = () => {
     if (partToDelete) {
-      setMockParts(prevParts => prevParts.filter(p => p.partNumber !== partToDelete.partNumber));
+      setMockParts(prevParts => prevParts.filter(p => 
+        !(p.partNumber === partToDelete.partNumber && p.mrp === partToDelete.mrp)
+      ));
       toast({
-        title: "Part Deleted",
-        description: `${partToDelete.partName} has been deleted.`,
+        title: "Part Entry Deleted",
+        description: `${partToDelete.partName} (MRP: ${partToDelete.mrp}) has been deleted.`,
         variant: "destructive",
       });
       setPartToDelete(null);
@@ -338,8 +370,19 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
     (part.partNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (part.otherName && part.otherName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (part.company && part.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (part.category?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+    (part.category?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (part.mrp?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  ).sort((a, b) => {
+    // Sort by part number, then by MRP
+    if (a.partNumber < b.partNumber) return -1;
+    if (a.partNumber > b.partNumber) return 1;
+    // If part numbers are equal, sort by MRP (parsing to float for numeric sort)
+    const mrpA = parseFloat(a.mrp.replace('₹', ''));
+    const mrpB = parseFloat(b.mrp.replace('₹', ''));
+    if (mrpA < mrpB) return -1;
+    if (mrpA > mrpB) return 1;
+    return 0;
+  });
 
 
   return (
@@ -356,7 +399,7 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Inventory Management</h1>
-            <p className="text-muted-foreground">Manage your automotive parts stock efficiently.</p>
+            <p className="text-muted-foreground">Manage your automotive parts stock efficiently. Parts with the same Part Number but different MRPs will be listed as separate entries.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleImportClick}>
@@ -375,15 +418,15 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
           <CardHeader>
             <CardTitle>Parts List</CardTitle>
             <CardDescription>
-              Browse, search, and manage your inventory parts. For Excel import, use columns in this order: 
+              Browse, search, and manage your inventory. For Excel import, use columns in this order: 
               {expectedColumns.join(', ')}. 
-              The first row can optionally be headers. All {expectedColumns.length} columns must be present for data rows, even if optional fields are empty.
-              If importing a part with an existing Part Number, its details (including MRP) will be updated and quantity will be added. New Part Numbers will be added.
+              The first row can optionally be headers. All {expectedColumns.length} columns must be present for data rows.
+              If importing a part with an existing Part Number and MRP, its details will be updated and quantity added. New Part Number + MRP combinations will be added as new entries.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Search by name, number, company, category..." 
+                placeholder="Search by name, number, company, category, MRP..." 
                 className="pl-10 w-full sm:w-1/2 lg:w-1/3" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -406,8 +449,8 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredParts.map((part, index) => ( // Added index for a more unique key if needed
-                  <TableRow key={`${part.partNumber}-${index}`}> 
+                {filteredParts.map((part, index) => (
+                  <TableRow key={`${part.partNumber}-${part.mrp}-${index}`}> 
                     <TableCell className="font-medium">{part.partName}</TableCell>
                     <TableCell>{part.otherName || '-'}</TableCell>
                     <TableCell>{part.partNumber}</TableCell>
@@ -442,30 +485,26 @@ const handlePartFormSubmit = (data: PartFormData, originalPartNumber?: string) =
         isOpen={isPartFormDialogOpen}
         onOpenChange={setIsPartFormDialogOpen}
         onSubmit={handlePartFormSubmit}
-        initialData={partToEdit}
-        dialogTitle={formMode === 'add' ? 'Add New Part' : 'Edit Part'}
+        initialData={partToEdit} // This now contains the full part object including original MRP
+        dialogTitle={formMode === 'add' ? 'Add New Part Entry' : 'Edit Part Entry'}
         formMode={formMode}
-        existingPartNumbers={mockParts.map(p => p.partNumber)}
       />
-      {partToEdit && formMode === 'edit' && ( // Conditionally render edit dialog only when partToEdit is set for editing
-        <PartFormDialog
-          isOpen={isPartFormDialogOpen && formMode === 'edit'}
-          onOpenChange={setIsPartFormDialogOpen}
-          onSubmit={handlePartFormSubmit}
-          initialData={partToEdit}
-          dialogTitle="Edit Part"
-          formMode="edit"
-          existingPartNumbers={mockParts.map(p => p.partNumber).filter(pn => pn !== partToEdit.partNumber)}
-        />
-      )}
+      {/* This second instance of PartFormDialog for edit mode seems redundant if initialData handles it well for both modes.
+          Let's ensure the single dialog instance is sufficient.
+          The key is that when formMode is 'edit', initialData (partToEdit) is correctly passed.
+          When formMode is 'add', initialData (partToEdit) is null.
+      */}
+      {/* Removed the conditional rendering for the second dialog as the first one should handle both cases */}
       {partToDelete && (
          <DeletePartDialog
             isOpen={isDeleteConfirmDialogOpen}
             onOpenChange={setIsDeleteConfirmDialogOpen}
             onConfirm={confirmDeletePart}
-            partName={partToDelete.partName}
+            partName={`${partToDelete.partName} (MRP: ${partToDelete.mrp})`}
           />
       )}
     </AppLayout>
   );
 }
+
+    
