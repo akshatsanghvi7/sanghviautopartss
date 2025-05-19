@@ -42,17 +42,16 @@ export default function SalesPage() {
   const [isInvoiceViewOpen, setIsInvoiceViewOpen] = useState(false);
   const [selectedSaleForInvoice, setSelectedSaleForInvoice] = useState<Sale | null>(null);
 
-  // Status filter states (example, can be expanded)
   const [statusFilters, setStatusFilters] = useState({
-    paid: true, // Assuming 'cash' and 'credit' initially mean paid for simplicity
-    pending: false, // If you add other statuses
-    overdue: false, // If you add other statuses
+    paid: true, 
+    pending: false, 
+    overdue: false, 
   });
 
 
   const handleNewSaleSubmit = (data: SaleFormData) => {
     const newSale: Sale = {
-      id: `S${Date.now().toString().slice(-4)}${Math.random().toString(36).substr(2, 2).toUpperCase()}`, // More unique ID
+      id: `S${Date.now().toString().slice(-4)}${Math.random().toString(36).substr(2, 2).toUpperCase()}`, 
       date: data.saleDate.toISOString(),
       buyerName: data.buyerName,
       gstNumber: data.gstNumber,
@@ -60,7 +59,7 @@ export default function SalesPage() {
       emailAddress: data.emailAddress,
       items: data.items.map(item => ({
         partNumber: item.partNumber,
-        partName: item.partName, // Ensure partName is populated during item selection
+        partName: item.partName, 
         quantitySold: item.quantity,
         unitPrice: item.unitPrice,
         itemTotal: item.quantity * item.unitPrice,
@@ -71,7 +70,6 @@ export default function SalesPage() {
       paymentType: data.paymentType,
     };
 
-    // Update inventory
     const updatedInventory = inventoryParts.map(part => {
       const soldItem = newSale.items.find(item => item.partNumber === part.partNumber);
       if (soldItem) {
@@ -83,7 +81,6 @@ export default function SalesPage() {
 
     setSales(prevSales => [newSale, ...prevSales]);
     
-    // Add/Update customer
     const existingCustomer = customers.find(c => c.name.toLowerCase() === newSale.buyerName.toLowerCase());
     if (!existingCustomer) {
       const newCustomer: Customer = {
@@ -91,7 +88,7 @@ export default function SalesPage() {
         name: newSale.buyerName,
         email: newSale.emailAddress,
         phone: newSale.contactDetails,
-        balance: '$0.00', // Default balance for new customer
+        balance: 0, // Initialize balance as a number
       };
       setCustomers(prevCustomers => [newCustomer, ...prevCustomers]);
       toast({
@@ -111,7 +108,6 @@ export default function SalesPage() {
   const handleViewBillClick = (sale: Sale) => {
     setSelectedSaleForInvoice(sale);
     setIsInvoiceViewOpen(true);
-    // Mailing simulation moved to InvoiceViewDialog
   };
 
   const filteredSales = sales.filter(sale =>
@@ -171,14 +167,14 @@ export default function SalesPage() {
                   <DropdownMenuCheckboxItem
                      checked={statusFilters.pending}
                      onCheckedChange={(checked) => handleStatusFilterChange('pending', Boolean(checked))}
-                     disabled // Example: enable when pending status is implemented
+                     disabled 
                   >
                     Pending
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={statusFilters.overdue}
                     onCheckedChange={(checked) => handleStatusFilterChange('overdue', Boolean(checked))}
-                    disabled // Example: enable when overdue status is implemented
+                    disabled 
                   >
                     Overdue
                   </DropdownMenuCheckboxItem>
@@ -209,7 +205,7 @@ export default function SalesPage() {
                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                         sale.paymentType === 'cash' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
                         sale.paymentType === 'credit' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' // Default/other
+                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' 
                       }`}>
                         {sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}
                       </span>

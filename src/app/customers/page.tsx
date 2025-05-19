@@ -14,10 +14,10 @@ import { useToast } from "@/hooks/use-toast";
 
 // Initial mock data if localStorage is empty
 const initialMockCustomers: Customer[] = [
-  { id: 'C001', name: 'John Doe', email: 'john.doe@example.com', phone: '555-1234', balance: '$0.00' },
-  { id: 'C002', name: 'Jane Smith', email: 'jane.smith@example.com', phone: '555-5678', balance: '$120.50' },
-  { id: 'C003', name: 'Bob Johnson', email: 'bob.j@example.com', phone: '555-8765', balance: '$0.00' },
-  { id: 'C004', name: 'Alice Brown', email: 'alice.b@example.com', phone: '555-4321', balance: '$45.20' },
+  { id: 'C001', name: 'John Doe', email: 'john.doe@example.com', phone: '555-1234', balance: 0 },
+  { id: 'C002', name: 'Jane Smith', email: 'jane.smith@example.com', phone: '555-5678', balance: 120.50 },
+  { id: 'C003', name: 'Bob Johnson', email: 'bob.j@example.com', phone: '555-8765', balance: 0 },
+  { id: 'C004', name: 'Alice Brown', email: 'alice.b@example.com', phone: '555-4321', balance: 45.20 },
 ];
 
 export default function CustomersPage() {
@@ -32,18 +32,14 @@ export default function CustomersPage() {
   );
 
   const handleAddCustomer = () => {
-    // Placeholder for add customer dialog/form
     toast({ title: "Feature Coming Soon", description: "Ability to manually add customers will be implemented." });
   };
 
   const handleEditCustomer = (customerId: string) => {
-    // Placeholder for edit customer
     toast({ title: "Feature Coming Soon", description: `Editing customer ${customerId} will be implemented.` });
   };
 
   const handleDeleteCustomer = (customerId: string) => {
-    // Placeholder for delete customer
-    // setCustomers(prev => prev.filter(c => c.id !== customerId));
     toast({ title: "Feature Coming Soon", description: `Deleting customer ${customerId} will be implemented with confirmation.` });
   };
 
@@ -92,13 +88,13 @@ export default function CustomersPage() {
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">{customer.id}</TableCell>
                     <TableCell>{customer.name}</TableCell>
-                    <TableCell className="flex items-center gap-1"> 
-                      {customer.email ? <><Mail className="h-3 w-3 text-muted-foreground"/> {customer.email}</> : '-'}
+                    <TableCell> 
+                      {customer.email ? <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground"/> {customer.email}</div> : '-'}
                     </TableCell>
-                    <TableCell className="flex items-center gap-1"> 
-                      {customer.phone ? <><Phone className="h-3 w-3 text-muted-foreground"/>{customer.phone}</> : '-'}
+                    <TableCell>
+                      {customer.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{customer.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">{customer.balance}</TableCell>
+                    <TableCell className="text-right">${customer.balance.toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)}>
                         <Edit2 className="h-4 w-4" />

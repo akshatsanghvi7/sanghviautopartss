@@ -16,12 +16,12 @@ import { SupplierPurchaseHistoryDialog } from '@/components/suppliers/SupplierPu
 
 // Initial mock data if localStorage is empty
 const initialMockSuppliers: Supplier[] = [
-  { id: 'SUP001', name: 'AutoParts Pro', contactPerson: 'Sarah Connor', email: 'sales@autopartspro.com', phone: '555-0011', balance: '$0.00' },
-  { id: 'SUP002', name: 'Speedy Spares', contactPerson: 'Mike Wheeler', email: 'info@speedyspares.co', phone: '555-0022', balance: '$0.00' },
-  { id: 'SUP003', name: 'Global Auto Inc.', contactPerson: 'Linda Hamilton', email: 'accounts@globalauto.com', phone: '555-0033', balance: '$0.00' },
+  { id: 'SUP001', name: 'AutoParts Pro', contactPerson: 'Sarah Connor', email: 'sales@autopartspro.com', phone: '555-0011', balance: 0 },
+  { id: 'SUP002', name: 'Speedy Spares', contactPerson: 'Mike Wheeler', email: 'info@speedyspares.co', phone: '555-0022', balance: 0 },
+  { id: 'SUP003', name: 'Global Auto Inc.', contactPerson: 'Linda Hamilton', email: 'accounts@globalauto.com', phone: '555-0033', balance: 0 },
 ];
 
-const excelColumns = ["Supplier ID", "Name", "Contact Person", "Email", "Phone", "Balance"];
+const excelColumns = ["Supplier ID", "Name", "Contact Person", "Email", "Phone", "Balance Owed ($)"];
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>('autocentral-suppliers', initialMockSuppliers);
@@ -32,11 +32,10 @@ export default function SuppliersPage() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
 
-  // De-duplicate suppliers by ID for display
   const uniqueSuppliers = useMemo(() => {
     const seenIds = new Set<string>();
     return suppliers.filter(supplier => {
-      if (!supplier || !supplier.id) return false; // Guard against null/undefined suppliers or missing ID
+      if (!supplier || !supplier.id) return false; 
       if (seenIds.has(supplier.id)) {
         return false;
       }
@@ -52,15 +51,15 @@ export default function SuppliersPage() {
   );
 
   const handleAddSupplier = () => {
-    toast({ title: "Feature Coming Soon", description: "Ability to manually add suppliers will be implemented. Suppliers are currently added automatically via Purchase Orders." });
+    toast({ title: "Feature Coming Soon", description: "Ability to manually add suppliers will be implemented. Suppliers are currently added automatically via Purchase Orders if they don't exist or their contact details are updated." });
   };
 
   const handleEditSupplier = (supplierId: string) => {
-    toast({ title: "Feature Coming Soon", description: `Editing supplier ${supplierId} will be implemented to correct details like phone/email or update contact information.` });
+    toast({ title: "Feature Coming Soon", description: `Editing supplier ${supplierId} will be implemented to correct details like phone/email or update contact information directly.` });
   };
 
   const handleDeleteSupplier = (supplierId: string) => {
-    toast({ title: "Feature Coming Soon", description: `Deleting supplier ${supplierId} will be implemented with confirmation.` });
+    toast({ title: "Feature Coming Soon", description: `Deleting supplier ${supplierId} will be implemented with confirmation. Ensure all dues are cleared.` });
   };
 
   const handleViewHistory = (supplier: Supplier) => {
@@ -86,7 +85,7 @@ export default function SuppliersPage() {
         supplier.contactPerson || '',
         supplier.email || '',
         supplier.phone || '',
-        supplier.balance || '',
+        supplier.balance.toFixed(2), // Export numeric balance
       ])
     ];
 
@@ -116,7 +115,7 @@ export default function SuppliersPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Supplier Management</h1>
-            <p className="text-muted-foreground">Manage your supplier information. Balances are not automatically updated from purchases yet.</p>
+            <p className="text-muted-foreground">Manage your supplier information. Balances represent amount owed from 'On Credit' purchases.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleExportToExcel}>
@@ -132,8 +131,8 @@ export default function SuppliersPage() {
           <CardHeader>
             <CardTitle>Supplier List</CardTitle>
             <CardDescription>
-              Browse, search, and manage your suppliers. New suppliers are automatically added from purchases. 
-              If you see issues like phone numbers in email fields, this indicates a data entry error that will be fixable via the 'Edit' feature once fully implemented.
+              Browse, search, and manage your suppliers. New suppliers are automatically added from purchases, and details are updated if changed in a PO.
+              If you see issues like phone numbers in email fields, this indicates a data entry error.
             </CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -154,7 +153,7 @@ export default function SuppliersPage() {
                   <TableHead>Contact Person</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead className="text-right">Balance Owed</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -170,7 +169,7 @@ export default function SuppliersPage() {
                     <TableCell>
                         {supplier.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{supplier.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">{supplier.balance}</TableCell>
+                    <TableCell className="text-right">${supplier.balance.toFixed(2)}</TableCell>
                     <TableCell className="text-center">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)}>
                         <History className="h-4 w-4" />

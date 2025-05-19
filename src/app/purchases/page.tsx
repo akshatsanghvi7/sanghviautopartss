@@ -56,60 +56,81 @@ export default function PurchasesPage() {
     let nameForPurchaseRecord = formSupplierNameTrimmed;
 
     let existingSupplier: Supplier | undefined = undefined;
+    let supplierUpdated = false;
+    let supplierAdded = false;
 
-    // Try to find by ID first if provided (e.g., selected from dropdown)
     if (data.supplierId) {
         existingSupplier = suppliers.find(s => s.id === data.supplierId);
     }
-    // If not found by ID, or ID not provided, try by name (case-insensitive, trimmed)
     if (!existingSupplier) {
         existingSupplier = suppliers.find(s => s.name.trim().toLowerCase() === formSupplierNameTrimmed.toLowerCase());
     }
 
     if (existingSupplier) {
         supplierIdToUse = existingSupplier.id;
-        nameForPurchaseRecord = formSupplierNameTrimmed; // PO record takes name from form
+        nameForPurchaseRecord = formSupplierNameTrimmed; 
 
-        // Check if any details actually changed to warrant an "Updated" toast
-        const nameActuallyChanged = existingSupplier.name.trim() !== formSupplierNameTrimmed;
-        const contactPersonActuallyChanged = (data.supplierContactPerson || "") !== (existingSupplier.contactPerson || "");
-        const emailActuallyChanged = (data.supplierEmail || "") !== (existingSupplier.email || "");
-        const phoneActuallyChanged = (data.supplierPhone || "") !== (existingSupplier.phone || "");
+        const updatedSupplierData: Partial<Supplier> = {};
+        let detailsChanged = false;
 
-        if (nameActuallyChanged || contactPersonActuallyChanged || emailActuallyChanged || phoneActuallyChanged) {
-            const updatedSuppliers = suppliers.map(s =>
+        if (existingSupplier.name.trim() !== formSupplierNameTrimmed) {
+            updatedSupplierData.name = formSupplierNameTrimmed;
+            detailsChanged = true;
+        }
+        if ((data.supplierContactPerson || "") !== (existingSupplier.contactPerson || "")) {
+            updatedSupplierData.contactPerson = data.supplierContactPerson;
+            detailsChanged = true;
+        }
+        if ((data.supplierEmail || "") !== (existingSupplier.email || "")) {
+            updatedSupplierData.email = data.supplierEmail;
+            detailsChanged = true;
+        }
+        if ((data.supplierPhone || "") !== (existingSupplier.phone || "")) {
+            updatedSupplierData.phone = data.supplierPhone;
+            detailsChanged = true;
+        }
+        
+        let newBalance = existingSupplier.balance;
+        if (data.paymentType === 'on_credit') {
+            newBalance = (existingSupplier.balance || 0) + (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0));
+            if (newBalance !== existingSupplier.balance) {
+                updatedSupplierData.balance = newBalance;
+                detailsChanged = true;
+            }
+        }
+        
+        if (detailsChanged) {
+            setSuppliers(prevSuppliers => prevSuppliers.map(s =>
                 s.id === existingSupplier!.id
-                ? { // This object is the updated supplier
-                    ...s,
-                    name: formSupplierNameTrimmed, // Standardize the name in the suppliers list to the form's input
-                    contactPerson: data.supplierContactPerson || s.contactPerson,
-                    email: data.supplierEmail || s.email,
-                    phone: data.supplierPhone || s.phone,
-                  }
+                ? { ...s, ...updatedSupplierData, balance: newBalance } // ensure balance always reflects latest
                 : s
-            );
-            setSuppliers(updatedSuppliers);
-            toast({
-                title: "Supplier Updated",
-                description: `Details for ${formSupplierNameTrimmed} updated.`,
-            });
+            ));
+            supplierUpdated = true;
         }
     } else {
-        // New supplier
         const newSupplierData: Supplier = {
             id: `SUP${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2,3).toUpperCase()}`,
-            name: formSupplierNameTrimmed, // Name from form
+            name: formSupplierNameTrimmed,
             contactPerson: data.supplierContactPerson,
             email: data.supplierEmail,
             phone: data.supplierPhone,
-            balance: '$0.00', 
+            balance: data.paymentType === 'on_credit' ? (data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0)) : 0,
         };
         setSuppliers(prevSuppliers => [newSupplierData, ...prevSuppliers]);
         supplierIdToUse = newSupplierData.id;
-        nameForPurchaseRecord = formSupplierNameTrimmed; // Name from form
+        nameForPurchaseRecord = formSupplierNameTrimmed;
+        supplierAdded = true;
+    }
+
+    if (supplierAdded) {
         toast({
             title: "New Supplier Added",
-            description: `${formSupplierNameTrimmed} has been added to suppliers list.`,
+            description: `${formSupplierNameTrimmed} has been added to suppliers list. Balance: $${(suppliers.find(s => s.id === supplierIdToUse)?.balance || 0).toFixed(2)}`,
+        });
+    } else if (supplierUpdated) {
+         toast({
+            title: "Supplier Updated",
+            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance: $${(suppliers.find(s => s.id === supplierIdToUse)?.balance || 0).toFixed(2)}`,
         });
     }
 
@@ -136,7 +157,6 @@ export default function PurchasesPage() {
       notes: data.notes,
     };
 
-    // Only update inventory if the PO is being created with 'Received' status
     if (newPurchase.status === 'Received') {
       const updatedInventory = inventoryParts.map(part => {
         const purchasedItem = newPurchase.items.find(item => item.partNumber === part.partNumber);
@@ -150,14 +170,13 @@ export default function PurchasesPage() {
         title: "Inventory Updated",
         description: "Stock levels increased for received items.",
       });
-    } else if (newPurchase.status !== 'Cancelled') { // Don't show this note for cancelled POs
+    } else if (newPurchase.status !== 'Cancelled') { 
         toast({
             title: "Note on Inventory",
             description: `Inventory stock is NOT updated for PO status '${newPurchase.status}'. To update stock, change status to 'Received' and handle stock manually, or recreate the PO if items are now received.`,
             duration: 9000,
         });
     }
-
 
     setPurchases(prevPurchases => [newPurchase, ...prevPurchases].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     toast({
@@ -179,7 +198,7 @@ export default function PurchasesPage() {
     );
     toast({
       title: "Status Updated",
-      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Note: This action does not automatically adjust inventory stock levels. Please manage stock adjustments manually if required.`,
+      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Note: This action does not automatically adjust inventory stock levels or supplier balances. Please manage these manually if required.`,
       duration: 8000,
     });
   };
@@ -231,7 +250,7 @@ export default function PurchasesPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Purchase History</CardTitle>
-            <CardDescription>Review all recorded purchase orders. Inventory is updated when a PO is created with 'Received' status. Changing status later does not auto-adjust stock.</CardDescription>
+            <CardDescription>Review all recorded purchase orders. Inventory is updated when a PO is created with 'Received' status. Supplier balance updated for 'On Credit' purchases.</CardDescription>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -334,4 +353,3 @@ export default function PurchasesPage() {
     </AppLayout>
   );
 }
-

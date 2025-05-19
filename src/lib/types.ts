@@ -63,7 +63,7 @@ export type Purchase = {
   shippingCosts?: number;
   otherCharges?: number;
   netAmount: number; // subTotal + shippingCosts + otherCharges
-  paymentType: 'cash' | 'bank_transfer' | 'credit_card' | 'cheque';
+  paymentType: 'cash' | 'bank_transfer' | 'on_credit' | 'cheque';
   status: 'Pending' | 'Ordered' | 'Partially Received' | 'Received' | 'Cancelled';
   notes?: string; // Optional field for any notes
 };
@@ -74,7 +74,7 @@ export type Customer = {
   name: string;
   email?: string;
   phone?: string;
-  balance: string; // Keeping as string for display, e.g., "$0.00"
+  balance: number; 
 };
 
 export type Supplier = {
@@ -83,6 +83,6 @@ export type Supplier = {
   contactPerson?: string;
   email?: string;
   phone?: string;
-  balance: string; // e.g. "$1200.00 (Owed)" or "$0.00"
+  balance: number; // Represents amount owed to supplier. Positive means we owe them.
 };
 

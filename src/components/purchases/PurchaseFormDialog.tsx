@@ -25,7 +25,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
 const purchaseItemSchema = z.object({
   partNumber: z.string().min(1, "Part Number is required"),
@@ -42,7 +41,7 @@ const purchaseFormSchema = z.object({
   supplierPhone: z.string().optional(),
   supplierInvoiceNumber: z.string().optional(),
   purchaseDate: z.date({ required_error: "Purchase Date is required" }).optional().nullable(),
-  paymentType: z.enum(['cash', 'bank_transfer', 'credit_card', 'cheque'], { required_error: "Payment Type is required" }),
+  paymentType: z.enum(['cash', 'bank_transfer', 'on_credit', 'cheque'], { required_error: "Payment Type is required" }),
   status: z.enum(['Pending', 'Ordered', 'Partially Received', 'Received', 'Cancelled'], { required_error: "Status is required" }),
   items: z.array(purchaseItemSchema).min(1, "At least one item must be added to the purchase order"),
   shippingCosts: z.coerce.number().min(0, "Shipping Costs cannot be negative").optional(),
@@ -149,17 +148,16 @@ export function PurchaseFormDialog({
   }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
 
   const handleSupplierNameChange = (name: string) => {
-    // This function is now called by the Controller's render prop's onChange
     if (name.length > 0) {
       const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
       );
       setSupplierSuggestions(filtered);
-      setIsSupplierPopoverOpen(filtered.length > 0 && document.activeElement === document.getElementById('supplierName'));
+      setIsSupplierPopoverOpen(filtered.length > 0 && document.activeElement === document.getElementById('supplierNameInput'));
     } else {
       setSupplierSuggestions([]);
       setIsSupplierPopoverOpen(false);
-      if (!initialData?.id) { // Only clear related fields if it's a new PO and not editing
+      if (!initialData?.id) { 
           setValue("supplierId", undefined);
           setValue("supplierContactPerson", "");
           setValue("supplierEmail", "");
@@ -170,7 +168,7 @@ export function PurchaseFormDialog({
 
   const handleSupplierSelect = (supplier: Supplier) => {
     setValue("supplierId", supplier.id);
-    setValue("supplierName", supplier.name); // This will also update the Controller's field
+    setValue("supplierName", supplier.name); 
     setValue("supplierContactPerson", supplier.contactPerson || "");
     setValue("supplierEmail", supplier.email || "");
     setValue("supplierPhone", supplier.phone || "");
@@ -186,15 +184,13 @@ export function PurchaseFormDialog({
   const handlePartSearch = (term: string) => {
     setPartSearchTerm(term);
     if (!term) {
-        setSelectedPartForAdding(null); // Clear selection if search term is cleared
+        setSelectedPartForAdding(null); 
     }
-    // No immediate selection here, selection happens via selectPartFromSearch
   };
 
   const selectPartFromSearch = (part: Part) => {
     setSelectedPartForAdding(part);
-    setPartSearchTerm(part.partName); // Update search term to reflect selected part name for clarity
-    // Clear suggestions as a part is now selected
+    setPartSearchTerm(part.partName); 
   }
 
   const handleAddItem = () => {
@@ -220,7 +216,7 @@ export function PurchaseFormDialog({
       const existingItem = fields[existingItemIndex];
       const newQuantity = existingItem.quantity + quantity;
       setValue(`items.${existingItemIndex}.quantity`, newQuantity);
-      setValue(`items.${existingItemIndex}.unitCost`, unitCost); // Potentially update cost if re-added
+      setValue(`items.${existingItemIndex}.unitCost`, unitCost); 
       toast({ title: "Item Updated", description: `Quantity for ${selectedPartForAdding.partName} updated.` });
     } else {
       append({
@@ -232,11 +228,11 @@ export function PurchaseFormDialog({
        toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} added to PO.` });
     }
 
-    setPartSearchTerm(''); // Clear search term
-    setSelectedPartForAdding(null); // Clear selected part
+    setPartSearchTerm(''); 
+    setSelectedPartForAdding(null); 
     setCurrentQuantityInput(1);
     setCurrentUnitCostInput(0);
-    document.getElementById('partSearch')?.focus(); // Focus back on part search
+    document.getElementById('partSearch')?.focus(); 
   };
 
   const watchedItems = watch("items");
@@ -292,30 +288,33 @@ export function PurchaseFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form id="purchaseFormId" onSubmit={handleSubmit(handleFormSubmitInternal)} className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
-        {/* Supplier Details Section */}
+        
         <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Supplier Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                <Label htmlFor="supplierName">Supplier Name *</Label>
+                <Label htmlFor="supplierNameInput">Supplier Name *</Label>
                 <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Controller
+                         <Controller
                             name="supplierName"
                             control={control}
                             render={({ field }) => (
                                 <Input
-                                    id="supplierName"
+                                    id="supplierNameInput"
                                     {...field}
                                     onChange={(e) => {
-                                        field.onChange(e); // Update RHF state
-                                        handleSupplierNameChange(e.target.value); // Handle suggestions
+                                        field.onChange(e); 
+                                        handleSupplierNameChange(e.target.value); 
                                     }}
                                     onFocus={() => {
-                                        // Show suggestions if input has text and suggestions exist
-                                        if(field.value && field.value.length > 0 && inventorySuppliers.filter(s=>s.name.toLowerCase().includes(field.value.toLowerCase())).length > 0) {
-                                            setSupplierSuggestions(inventorySuppliers.filter(s=>s.name.toLowerCase().includes(field.value.toLowerCase())));
-                                            setIsSupplierPopoverOpen(true);
+                                        const currentValue = getValues('supplierName');
+                                        if(currentValue && currentValue.length > 0) {
+                                            const filtered = inventorySuppliers.filter(s=>s.name.toLowerCase().includes(currentValue.toLowerCase()));
+                                            if (filtered.length > 0) {
+                                                setSupplierSuggestions(filtered);
+                                                setIsSupplierPopoverOpen(true);
+                                            }
                                         }
                                     }}
                                     autoComplete="off"
@@ -327,7 +326,7 @@ export function PurchaseFormDialog({
                         <PopoverContent
                             className="w-[--radix-popover-trigger-width] p-0"
                             align="start"
-                            onOpenAutoFocus={(e) => e.preventDefault()}
+                            onOpenAutoFocus={(e) => e.preventDefault()} 
                         >
                             <div className="max-h-40 overflow-y-auto custom-scrollbar">
                                 {supplierSuggestions.map((s) => (
@@ -361,7 +360,7 @@ export function PurchaseFormDialog({
             </div>
         </div>
 
-        {/* Purchase Order Details Section */}
+        
         <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Order Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -394,7 +393,7 @@ export function PurchaseFormDialog({
                         <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="credit_card">Credit Card</SelectItem>
+                        <SelectItem value="on_credit">On Credit</SelectItem>
                         <SelectItem value="cheque">Cheque</SelectItem>
                         </SelectContent>
                     </Select>
@@ -432,9 +431,9 @@ export function PurchaseFormDialog({
                 <p className="text-sm text-destructive">Please add at least one item.</p>
             )}
             {errors.items?.message && <p className="text-sm text-destructive">{errors.items.message}</p>}
-
+            
             <div className="space-y-3">
-                <div> {/* Wrapper for search input */}
+                <div>
                     <Label htmlFor="partSearch">Search Part (Name/Number)</Label>
                     <Input
                         id="partSearch"
@@ -444,7 +443,7 @@ export function PurchaseFormDialog({
                         autoComplete="off"
                     />
                 </div>
-
+            
                 {/* Conditional rendering block for suggestions OR "not found" message */}
                 {partSearchTerm && (
                     filteredInventoryParts.length > 0 ? (
@@ -460,7 +459,7 @@ export function PurchaseFormDialog({
                             ))}
                         </div>
                     ) : (
-                         partSearchTerm.length > 0 && !selectedPartForAdding && ( // Only show if search term exists, no part selected, and no results
+                         partSearchTerm.length > 0 && !selectedPartForAdding && ( 
                             <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
                                 Part not found: "{partSearchTerm}". Please add new parts via the Inventory page.
                             </div>
