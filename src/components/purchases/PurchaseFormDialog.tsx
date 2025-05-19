@@ -26,10 +26,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils'; // Ensure cn is imported if used in Command
 
 const purchaseItemSchema = z.object({
   partNumber: z.string().min(1, "Part Number is required"),
-  partName: z.string(), 
+  partName: z.string(),
   quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
   unitCost: z.coerce.number().min(0, "Unit Cost must be zero or positive"),
 });
@@ -58,6 +59,7 @@ interface PurchaseFormDialogProps {
   onSubmit: (data: PurchaseFormData) => void;
   inventoryParts: Part[];
   inventorySuppliers: Supplier[];
+  initialData?: PurchaseFormData & { id?: string }; // Optional initialData for editing in future
 }
 
 export function PurchaseFormDialog({
@@ -66,6 +68,7 @@ export function PurchaseFormDialog({
   onSubmit,
   inventoryParts,
   inventorySuppliers,
+  initialData, // Added initialData for potential future edit functionality
 }: PurchaseFormDialogProps) {
   const { toast } = useToast();
   const {
@@ -79,7 +82,7 @@ export function PurchaseFormDialog({
     formState: { errors },
   } = useForm<PurchaseFormData>({
     resolver: zodResolver(purchaseFormSchema),
-    defaultValues: {
+    defaultValues: initialData || { // Use initialData if provided, else default
       purchaseDate: undefined,
       items: [],
       shippingCosts: 0,
@@ -105,14 +108,14 @@ export function PurchaseFormDialog({
   const [currentUnitCostInput, setCurrentUnitCostInput] = useState<number | string>(0);
   const [selectedPartForAdding, setSelectedPartForAdding] = useState<Part | null>(null);
 
-  const [supplierNameInput, setSupplierNameInput] = useState('');
+  const [supplierNameInput, setSupplierNameInput] = useState(initialData?.supplierName || '');
   const [supplierSuggestions, setSupplierSuggestions] = useState<Supplier[]>([]);
   const [isSupplierPopoverOpen, setIsSupplierPopoverOpen] = useState(false);
 
 
   const resetFormState = useCallback(() => {
-    reset({
-      purchaseDate: new Date(), // Set to current date on reset for new PO
+    reset(initialData || { // Reset to initialData if in edit mode, else default new form state
+      purchaseDate: new Date(),
       items: [],
       shippingCosts: 0,
       otherCharges: 0,
@@ -130,27 +133,31 @@ export function PurchaseFormDialog({
     setCurrentQuantityInput(1);
     setCurrentUnitCostInput(0);
     setSelectedPartForAdding(null);
-    setSupplierNameInput('');
+    setSupplierNameInput(initialData?.supplierName || '');
     setSupplierSuggestions([]);
-  }, [reset]);
+    setIsSupplierPopoverOpen(false);
+  }, [reset, initialData]);
 
   useEffect(() => {
     if (isOpen) {
-      if (!getValues('purchaseDate')) { // Only set if not already set (e.g. for edit mode in future)
+      if (initialData) { // If editing, populate form with initialData
+        reset(initialData);
+        setSupplierNameInput(initialData.supplierName || '');
+      } else if (!getValues('purchaseDate')) { // New PO, set date if not already set
         setValue('purchaseDate', new Date());
       }
     } else {
       resetFormState();
     }
-  }, [isOpen, getValues, setValue, resetFormState]);
-  
+  }, [isOpen, getValues, setValue, resetFormState, initialData, reset]);
+
   const handleSupplierNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setSupplierNameInput(name);
-    setValue("supplierName", name); // Keep react-hook-form state updated
+    setValue("supplierName", name, { shouldValidate: true });
 
-    if (name.length > 1) {
-      const filtered = inventorySuppliers.filter(s => 
+    if (name.length > 0) {
+      const filtered = inventorySuppliers.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
       );
       setSupplierSuggestions(filtered);
@@ -158,23 +165,26 @@ export function PurchaseFormDialog({
     } else {
       setSupplierSuggestions([]);
       setIsSupplierPopoverOpen(false);
-      // Clear related supplier fields if name is too short or cleared
-      setValue("supplierId", undefined);
-      setValue("supplierContactPerson", "");
-      setValue("supplierEmail", "");
-      setValue("supplierPhone", "");
+      if (!initialData?.id) { // Only clear if not in edit mode for a specific supplier
+          setValue("supplierId", undefined);
+          setValue("supplierContactPerson", "");
+          setValue("supplierEmail", "");
+          setValue("supplierPhone", "");
+      }
     }
   };
 
   const handleSupplierSelect = (supplier: Supplier) => {
     setValue("supplierId", supplier.id);
     setValue("supplierName", supplier.name);
-    setSupplierNameInput(supplier.name); // Sync visual input
+    setSupplierNameInput(supplier.name);
     setValue("supplierContactPerson", supplier.contactPerson || "");
     setValue("supplierEmail", supplier.email || "");
     setValue("supplierPhone", supplier.phone || "");
     setSupplierSuggestions([]);
     setIsSupplierPopoverOpen(false);
+    // Optionally focus next field
+    document.getElementById('supplierContactPerson')?.focus();
   };
 
 
@@ -184,16 +194,16 @@ export function PurchaseFormDialog({
         setSelectedPartForAdding(null);
         return;
     }
-    const part = inventoryParts.find(p => 
+    const part = inventoryParts.find(p =>
         p.partNumber.toLowerCase().includes(term.toLowerCase()) ||
         p.partName.toLowerCase().includes(term.toLowerCase())
     );
     setSelectedPartForAdding(part || null);
   };
-  
+
   const selectPartFromSearch = (part: Part) => {
     setSelectedPartForAdding(part);
-    setPartSearchTerm(part.partName); 
+    setPartSearchTerm(part.partName);
   }
 
   const handleAddItem = () => {
@@ -219,7 +229,7 @@ export function PurchaseFormDialog({
       const existingItem = fields[existingItemIndex];
       const newQuantity = existingItem.quantity + quantity;
       setValue(`items.${existingItemIndex}.quantity`, newQuantity);
-      setValue(`items.${existingItemIndex}.unitCost`, unitCost); 
+      setValue(`items.${existingItemIndex}.unitCost`, unitCost);
       toast({ title: "Item Updated", description: `Quantity for ${selectedPartForAdding.partName} updated.` });
     } else {
       append({
@@ -228,18 +238,18 @@ export function PurchaseFormDialog({
         quantity: quantity,
         unitCost: unitCost,
       });
+       toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} added to PO.` });
     }
-    
-    setPartSearchTerm(''); 
+
+    setPartSearchTerm('');
     setSelectedPartForAdding(null);
     setCurrentQuantityInput(1);
     setCurrentUnitCostInput(0);
-     toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} added to PO.` });
   };
 
   const watchedItems = watch("items");
   const subTotal = watchedItems.reduce((acc, item) => acc + (item.quantity * item.unitCost), 0);
-  
+
   const watchedShipping = watch("shippingCosts");
   const watchedOtherCharges = watch("otherCharges");
 
@@ -273,7 +283,7 @@ export function PurchaseFormDialog({
     };
     onSubmit(submissionData as PurchaseFormData & { purchaseDate: Date });
   };
-  
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -282,11 +292,13 @@ export function PurchaseFormDialog({
     }}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Create New Purchase Order</DialogTitle>
-          <DialogDescription>Fill in the details for the new purchase order.</DialogDescription>
+          <DialogTitle>{initialData?.id ? 'Edit Purchase Order' : 'Create New Purchase Order'}</DialogTitle>
+          <DialogDescription>
+            {initialData?.id ? 'Update the details of this purchase order.' : 'Fill in the details for the new purchase order.'}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="space-y-4">
-        <ScrollArea className="h-[70vh] pr-6">
+        <ScrollArea className="h-[60vh] pr-6"> {/* Reduced height from 70vh to 60vh */}
           {/* Supplier Details Section */}
           <div className="space-y-4 p-4 border rounded-md mb-6">
             <h3 className="text-md font-medium">Supplier Information</h3>
@@ -295,17 +307,20 @@ export function PurchaseFormDialog({
                 <Label htmlFor="supplierName">Supplier Name *</Label>
                  <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Input 
-                            id="supplierName" 
+                        <Input
+                            id="supplierName"
                             value={supplierNameInput}
                             onChange={handleSupplierNameChange}
-                            onFocus={() => supplierNameInput && supplierSuggestions.length > 0 && setIsSupplierPopoverOpen(true)}
                             autoComplete="off"
                         />
                     </PopoverTrigger>
                     {supplierSuggestions.length > 0 && (
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                             <Command>
+                        <PopoverContent
+                            className="w-[--radix-popover-trigger-width] p-0"
+                            align="start"
+                            onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus steal
+                        >
+                             <Command> {/* This is a custom simple Command, not cmdk */}
                                 {supplierSuggestions.map((s) => (
                                 <div
                                     key={s.id}
@@ -365,7 +380,7 @@ export function PurchaseFormDialog({
                     name="paymentType"
                     control={control}
                     render={({ field }) => (
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <SelectTrigger><SelectValue placeholder="Select payment type" /></SelectTrigger>
                         <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
@@ -384,7 +399,7 @@ export function PurchaseFormDialog({
                         name="status"
                         control={control}
                         render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                             <SelectContent>
                             <SelectItem value="Pending">Pending</SelectItem>
@@ -400,7 +415,7 @@ export function PurchaseFormDialog({
                 </div>
             </div>
           </div>
-          
+
 
           <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Purchase Items</h3>
@@ -519,7 +534,7 @@ export function PurchaseFormDialog({
             <DialogClose asChild>
                 <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>
-            <Button type="submit">Create Purchase Order</Button>
+            <Button type="submit">{initialData?.id ? 'Update Purchase Order' : 'Create Purchase Order'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -529,7 +544,6 @@ export function PurchaseFormDialog({
 
 // Minimal Command component structure for Popover content, if not already globally available
 // This is a simplified version for the popover suggestion list.
-// In a real app, you might use the full `cmdk` library or a more robust Combobox.
 const Command = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -541,3 +555,6 @@ const Command = React.forwardRef<
   />
 ));
 Command.displayName = "Command";
+
+
+    
