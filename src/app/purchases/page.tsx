@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Search, Filter, FileText, CheckCircle, XCircle, DollarSign } from 'lucide-react';
+import { PlusCircle, Search, Filter, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Purchase, Part, Supplier } from '@/lib/types';
+import type { Purchase, Part, Supplier, PurchaseItem as PurchaseItemType } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
 import { PurchaseOrderViewDialog } from '@/components/purchases/PurchaseOrderViewDialog';
 import { format } from 'date-fns';
@@ -100,12 +100,13 @@ export default function PurchasesPage() {
             updatedSupplierData.balance = newBalance;
             detailsChanged = true;
         } else if (!('balance' in updatedSupplierData) && typeof existingSupplier.balance !== 'number') {
+             // Ensure balance is set if it wasn't numeric before
             updatedSupplierData.balance = newBalance;
         }
         
         finalSupplierBalanceForToast = newBalance;
 
-        if (detailsChanged) {
+        if (detailsChanged || updatedSupplierData.balance !== existingSupplier.balance) { // Check if balance explicitly changed
             setSuppliers(prevSuppliers => prevSuppliers.map(s =>
                 s.id === existingSupplier!.id
                 ? { ...s, ...updatedSupplierData, name: updatedSupplierData.name || s.name, balance: newBalance }
@@ -133,12 +134,12 @@ export default function PurchasesPage() {
     if (supplierAdded) {
         toast({
             title: "New Supplier Added",
-            description: `${formSupplierNameTrimmed} added. Balance: $${finalSupplierBalanceForToast.toFixed(2)}`,
+            description: `${formSupplierNameTrimmed} added. Balance Owed: $${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     } else if (supplierUpdated) {
          toast({
             title: "Supplier Updated",
-            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance: $${finalSupplierBalanceForToast.toFixed(2)}`,
+            description: `Details for ${formSupplierNameTrimmed} updated. Current Balance Owed: $${finalSupplierBalanceForToast.toFixed(2)}`,
         });
     }
 
@@ -163,10 +164,9 @@ export default function PurchasesPage() {
       paymentType: data.paymentType,
       status: data.status,
       notes: data.notes,
-      paymentSettled: data.paymentType !== 'on_credit', // Automatically true if not 'on_credit'
+      paymentSettled: data.paymentType !== 'on_credit', 
     };
 
-    // Inventory Update Logic for new PO
     if (newPurchase.status === 'Received') {
       updateInventoryForPurchase(newPurchase.items, 'increase');
     } else if (newPurchase.status !== 'Cancelled') { 
@@ -186,7 +186,7 @@ export default function PurchasesPage() {
   };
   
   const updateInventoryForPurchase = (
-    items: PurchaseItem[], 
+    items: PurchaseItemType[], 
     action: 'increase' | 'decrease'
   ) => {
     setInventoryParts(prevInventory => {
@@ -194,7 +194,7 @@ export default function PurchasesPage() {
         const purchasedItem = items.find(item => item.partNumber === part.partNumber);
         if (purchasedItem) {
           const quantityChange = action === 'increase' ? purchasedItem.quantityPurchased : -purchasedItem.quantityPurchased;
-          return { ...part, quantity: Math.max(0, part.quantity + quantityChange) }; // Ensure quantity doesn't go below 0
+          return { ...part, quantity: Math.max(0, part.quantity + quantityChange) }; 
         }
         return part;
       });
@@ -231,51 +231,68 @@ export default function PurchasesPage() {
         updateInventoryForPurchase(purchaseToUpdate.items, 'increase');
       } else if (newStatus !== 'Received' && oldStatus === 'Received') {
         updateInventoryForPurchase(purchaseToUpdate.items, 'decrease');
-      } else {
+      } else if (newStatus !== oldStatus) { // Only toast if status actually changed
          toast({
-            title: "Status Updated",
-            description: `Purchase Order ${purchaseId} status changed to ${newStatus}. No inventory change as status change was not to/from 'Received'.`,
+            title: "Order Status Updated",
+            description: `Purchase Order ${purchaseId} status changed to ${newStatus}. No inventory change as status did not cross 'Received' threshold.`,
             duration: 7000,
         });
       }
     }
   };
 
-  const handleTogglePaymentSettled = (purchaseId: string) => {
+  const handlePaymentStatusChange = (purchaseId: string, newPaymentSelection: 'paid' | 'due') => {
     let purchaseToUpdate: Purchase | undefined;
-    let newPaymentSettledStatus: boolean | undefined;
+    let supplierToUpdate: Supplier | undefined;
+    let balanceChange = 0;
+    let finalSupplierName = '';
 
-    setPurchases(prevPurchases => 
+    setPurchases(prevPurchases =>
       prevPurchases.map(p => {
         if (p.id === purchaseId && p.paymentType === 'on_credit') {
-          newPaymentSettledStatus = !(p.paymentSettled ?? false);
-          purchaseToUpdate = { ...p, paymentSettled: newPaymentSettledStatus };
+          const oldPaymentSettled = p.paymentSettled ?? false;
+          const newPaymentSettled = newPaymentSelection === 'paid';
+
+          if (oldPaymentSettled === newPaymentSettled) {
+            purchaseToUpdate = p; // No change needed for purchase itself
+            return p; // No actual change to purchase, but we might need supplier info
+          }
+          
+          purchaseToUpdate = { ...p, paymentSettled: newPaymentSettled };
+          finalSupplierName = p.supplierName;
+
+          if (oldPaymentSettled === false && newPaymentSettled === true) { // Was Due, now Paid
+            balanceChange = -p.netAmount;
+          } else if (oldPaymentSettled === true && newPaymentSettled === false) { // Was Paid, now Due
+            balanceChange = p.netAmount;
+          }
           return purchaseToUpdate;
         }
         return p;
       })
     );
 
-    if (purchaseToUpdate && purchaseToUpdate.supplierId && newPaymentSettledStatus !== undefined) {
-      const amount = purchaseToUpdate.netAmount;
-      const supplierId = purchaseToUpdate.supplierId;
-
-      setSuppliers(prevSuppliers => 
+    if (purchaseToUpdate && balanceChange !== 0 && purchaseToUpdate.supplierId) {
+      setSuppliers(prevSuppliers =>
         prevSuppliers.map(s => {
-          if (s.id === supplierId) {
-            const balanceChange = newPaymentSettledStatus ? -amount : amount; // Decrease if Paid, Increase if Due
-            const newBalance = (s.balance || 0) + balanceChange;
-            toast({
-              title: `Payment Status for PO ${purchaseId} Updated`,
-              description: `Marked as ${newPaymentSettledStatus ? 'Paid' : 'Due'}. Supplier ${s.name}'s balance updated to $${newBalance.toFixed(2)}.`,
-            });
-            return { ...s, balance: newBalance };
+          if (s.id === purchaseToUpdate!.supplierId) {
+            supplierToUpdate = { ...s, balance: (s.balance || 0) + balanceChange };
+            return supplierToUpdate;
           }
           return s;
         })
       );
+    }
+    
+    if (purchaseToUpdate && balanceChange !== 0 && supplierToUpdate) {
+        toast({
+            title: `Payment Status Updated for PO ${purchaseId}`,
+            description: `Marked as ${newPaymentSelection.toUpperCase()}. Supplier ${finalSupplierName}'s balance updated to $${supplierToUpdate.balance.toFixed(2)}.`,
+        });
     } else if (purchaseToUpdate && purchaseToUpdate.paymentType !== 'on_credit') {
-        toast({title: "Action Not Applicable", description: `Payment status can only be toggled for 'On Credit' POs. This PO is ${purchaseToUpdate.paymentType}.`})
+        toast({title: "Action Not Applicable", description: `Payment status can only be changed for 'On Credit' POs. This PO is ${purchaseToUpdate.paymentType}.`})
+    } else if (balanceChange === 0 && purchaseToUpdate && purchaseToUpdate.paymentType === 'on_credit') {
+        // This case means the status was already what the user selected. No toast needed.
     }
   };
 
@@ -293,20 +310,22 @@ export default function PurchasesPage() {
     (statusFilters[purchase.status])
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
-  const getStatusColor = (status: Purchase['status']) => {
+  const getOrderStatusColor = (status: Purchase['status']) => {
     switch (status) {
-      case 'Received':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Pending':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'Ordered':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'Partially Received':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; 
-      case 'Cancelled':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+      case 'Received': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700';
+      case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700';
+      case 'Ordered': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700';
+      case 'Partially Received': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-700';
+      case 'Cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border-red-300 dark:border-red-700';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600';
+    }
+  };
+
+  const getPaymentStatusSelectStyle = (isSettled?: boolean) => {
+    if (isSettled) { // Paid
+      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-800';
+    } else { // Due
+      return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-300 dark:border-orange-700 hover:bg-orange-200 dark:hover:bg-orange-800';
     }
   };
 
@@ -377,7 +396,6 @@ export default function PurchasesPage() {
               <TableBody>
                 {filteredPurchases.map((purchase) => {
                   const isCreditPurchase = purchase.paymentType === 'on_credit';
-                  const paymentSettled = purchase.paymentSettled ?? false;
                   
                   return (
                     <TableRow key={purchase.id}>
@@ -390,7 +408,7 @@ export default function PurchasesPage() {
                             value={purchase.status}
                             onValueChange={(newStatus: Purchase['status']) => handlePurchaseStatusChange(purchase.id, newStatus)}
                         >
-                          <SelectTrigger className={cn("h-8 text-xs w-auto min-w-[120px]", getStatusColor(purchase.status))}>
+                          <SelectTrigger className={cn("h-8 text-xs w-auto min-w-[120px] border", getOrderStatusColor(purchase.status))}>
                               <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                           <SelectContent>
@@ -402,20 +420,25 @@ export default function PurchasesPage() {
                       </TableCell>
                       <TableCell>
                         {isCreditPurchase ? (
-                          <Button
-                            variant={paymentSettled ? "ghost" : "outline"}
-                            size="sm"
-                            className={cn(
-                              "text-xs h-8",
-                              paymentSettled ? "text-green-600 hover:text-green-700" : "text-orange-600 hover:text-orange-700"
-                            )}
-                            onClick={() => handleTogglePaymentSettled(purchase.id)}
+                          <Select
+                            value={purchase.paymentSettled ? 'paid' : 'due'}
+                            onValueChange={(newPaymentSelection: 'paid' | 'due') => handlePaymentStatusChange(purchase.id, newPaymentSelection)}
                           >
-                            {paymentSettled ? <CheckCircle className="mr-1 h-3.5 w-3.5" /> : <XCircle className="mr-1 h-3.5 w-3.5" />}
-                            {paymentSettled ? 'Paid' : 'Due'}
-                          </Button>
+                            <SelectTrigger 
+                              className={cn(
+                                "h-8 text-xs w-auto min-w-[100px] border", 
+                                getPaymentStatusSelectStyle(purchase.paymentSettled)
+                              )}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="due" className="text-xs text-orange-800 dark:text-orange-200">Due</SelectItem>
+                              <SelectItem value="paid" className="text-xs text-green-800 dark:text-green-200">Paid</SelectItem>
+                            </SelectContent>
+                          </Select>
                         ) : (
-                          <span className="text-xs text-muted-foreground px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">
+                          <span className="text-xs text-muted-foreground px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
                             Paid (Upfront)
                           </span>
                         )}
@@ -456,3 +479,6 @@ export default function PurchasesPage() {
     </AppLayout>
   );
 }
+
+
+    
