@@ -52,63 +52,63 @@ export default function PurchasesPage() {
     const newPurchaseId = `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
     
     let supplierIdToUse = data.supplierId;
-    let supplierNameToUse = data.supplierName;
+    let supplierNameToUse = data.supplierName.trim(); // Trim the name
+    let existingSupplier: Supplier | undefined = undefined;
 
-    const existingSupplierByName = suppliers.find(s => s.name.toLowerCase() === data.supplierName.toLowerCase());
-    
-    if (data.supplierId && existingSupplierByName && data.supplierId === existingSupplierByName.id) {
-      const updatedSuppliers = suppliers.map(s => 
-        s.id === data.supplierId 
-        ? { ...s, 
-            name: data.supplierName, 
-            contactPerson: data.supplierContactPerson || s.contactPerson,
-            email: data.supplierEmail || s.email,
-            phone: data.supplierPhone || s.phone,
-          } 
-        : s
-      );
-      setSuppliers(updatedSuppliers);
-      supplierIdToUse = data.supplierId;
-      supplierNameToUse = data.supplierName;
-    } else if (existingSupplierByName && !data.supplierId) {
-       const updatedSuppliers = suppliers.map(s => 
-        s.id === existingSupplierByName.id
-        ? { ...s, 
-            contactPerson: data.supplierContactPerson || s.contactPerson,
-            email: data.supplierEmail || s.email,
-            phone: data.supplierPhone || s.phone,
-          } 
-        : s
-      );
-      setSuppliers(updatedSuppliers);
-      supplierIdToUse = existingSupplierByName.id;
-      supplierNameToUse = existingSupplierByName.name;
-      toast({
-        title: "Supplier Updated",
-        description: `Details for ${existingSupplierByName.name} updated.`,
-      });
-    } else if (!existingSupplierByName) { 
-      const newSupplier: Supplier = {
-        id: `SUP${Date.now().toString().slice(-5)}`,
-        name: data.supplierName,
-        contactPerson: data.supplierContactPerson,
-        email: data.supplierEmail,
-        phone: data.supplierPhone,
-        balance: '$0.00',
-      };
-      setSuppliers(prevSuppliers => [newSupplier, ...prevSuppliers]);
-      supplierIdToUse = newSupplier.id;
-      supplierNameToUse = newSupplier.name;
-      toast({
-        title: "New Supplier Added",
-        description: `${newSupplier.name} has been added.`,
-      });
+    // Try to find by ID first if provided (e.g., selected from dropdown)
+    if (data.supplierId) {
+        existingSupplier = suppliers.find(s => s.id === data.supplierId);
+    }
+    // If not found by ID, or ID not provided, try by name (case-insensitive, trimmed)
+    if (!existingSupplier) {
+        existingSupplier = suppliers.find(s => s.name.toLowerCase() === supplierNameToUse.toLowerCase());
+    }
+
+    if (existingSupplier) {
+        // Update existing supplier
+        const updatedSuppliers = suppliers.map(s =>
+            s.id === existingSupplier!.id
+            ? {
+                ...s,
+                name: supplierNameToUse, // Allow name update if user changed it slightly
+                contactPerson: data.supplierContactPerson || s.contactPerson,
+                email: data.supplierEmail || s.email,
+                phone: data.supplierPhone || s.phone,
+              }
+            : s
+        );
+        setSuppliers(updatedSuppliers);
+        supplierIdToUse = existingSupplier.id;
+        supplierNameToUse = supplierNameToUse; // Use the (potentially updated) name from form
+        if(data.supplierContactPerson || data.supplierEmail || data.supplierPhone){
+             toast({
+                title: "Supplier Updated",
+                description: `Details for ${supplierNameToUse} updated.`,
+            });
+        }
+    } else {
+        // New supplier
+        const newSupplierData: Supplier = {
+            id: `SUP${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2,3).toUpperCase()}`,
+            name: supplierNameToUse,
+            contactPerson: data.supplierContactPerson,
+            email: data.supplierEmail,
+            phone: data.supplierPhone,
+            balance: '$0.00', 
+        };
+        setSuppliers(prevSuppliers => [newSupplierData, ...prevSuppliers]);
+        supplierIdToUse = newSupplierData.id;
+        // supplierNameToUse remains supplierNameToUse
+        toast({
+            title: "New Supplier Added",
+            description: `${supplierNameToUse} has been added to suppliers list.`,
+        });
     }
 
 
     const newPurchase: Purchase = {
       id: newPurchaseId,
-      date: data.purchaseDate!.toISOString(),
+      date: data.purchaseDate!.toISOString(), // purchaseDate is now guaranteed by form validation
       supplierId: supplierIdToUse,
       supplierName: supplierNameToUse,
       supplierInvoiceNumber: data.supplierInvoiceNumber,
@@ -128,6 +128,7 @@ export default function PurchasesPage() {
       notes: data.notes,
     };
 
+    // Only update inventory if the PO is being created with 'Received' status
     if (newPurchase.status === 'Received') {
       const updatedInventory = inventoryParts.map(part => {
         const purchasedItem = newPurchase.items.find(item => item.partNumber === part.partNumber);
@@ -137,9 +138,20 @@ export default function PurchasesPage() {
         return part;
       });
       setInventoryParts(updatedInventory);
+      toast({
+        title: "Inventory Updated",
+        description: "Stock levels increased for received items.",
+      });
+    } else {
+        toast({
+            title: "Note on Inventory",
+            description: `Inventory stock is NOT updated for PO status '${newPurchase.status}'. Change status to 'Received' and handle stock manually or re-create PO if items are received.`,
+            duration: 9000,
+        });
     }
 
-    setPurchases(prevPurchases => [newPurchase, ...prevPurchases]);
+
+    setPurchases(prevPurchases => [newPurchase, ...prevPurchases].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     toast({
       title: "Purchase Order Recorded",
       description: `PO ID ${newPurchase.id} from ${supplierNameToUse} has been recorded.`,
@@ -155,11 +167,11 @@ export default function PurchasesPage() {
     setPurchases(prevPurchases => 
       prevPurchases.map(p => 
         p.id === purchaseId ? { ...p, status: newStatus } : p
-      )
+      ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     );
     toast({
       title: "Status Updated",
-      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Inventory stock levels are not automatically adjusted by this status change alone.`,
+      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Note: This action does not automatically adjust inventory stock levels.`,
       duration: 7000,
     });
   };
@@ -175,7 +187,7 @@ export default function PurchasesPage() {
      (purchase.supplierId && purchase.supplierId.toLowerCase().includes(searchTerm.toLowerCase()))
     ) &&
     (statusFilters[purchase.status])
-  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort by date descending
+  ); // No need to sort here, already sorted when set
   
   const getStatusColor = (status: Purchase['status']) => {
     switch (status) {
@@ -211,7 +223,7 @@ export default function PurchasesPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Purchase History</CardTitle>
-            <CardDescription>Review all recorded purchase orders. Inventory is updated when PO status is 'Received' upon creation.</CardDescription>
+            <CardDescription>Review all recorded purchase orders. Inventory is updated when PO status is 'Received' upon creation. Changing status later does not auto-adjust stock.</CardDescription>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
