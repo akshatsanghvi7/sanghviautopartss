@@ -21,7 +21,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Purchase, Part, Supplier } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
-import { PurchaseOrderViewDialog } from '@/components/purchases/PurchaseOrderViewDialog'; // New Import
+import { PurchaseOrderViewDialog } from '@/components/purchases/PurchaseOrderViewDialog';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -35,8 +35,8 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>('autocentral-suppliers', []);
 
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false);
-  const [isPurchaseViewOpen, setIsPurchaseViewOpen] = useState(false); // New state for view dialog
-  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null); // New state for selected PO
+  const [isPurchaseViewOpen, setIsPurchaseViewOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
   
   const purchaseStatuses: Purchase['status'][] = ['Pending', 'Ordered', 'Partially Received', 'Received', 'Cancelled'];
   const [statusFilters, setStatusFilters] = useState<Record<Purchase['status'], boolean>>({
@@ -52,7 +52,9 @@ export default function PurchasesPage() {
     const newPurchaseId = `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
     
     let supplierIdToUse = data.supplierId;
-    let supplierNameToUse = data.supplierName.trim(); // Trim the name
+    const formSupplierNameTrimmed = data.supplierName.trim();
+    let nameForPurchaseRecord = formSupplierNameTrimmed;
+
     let existingSupplier: Supplier | undefined = undefined;
 
     // Try to find by ID first if provided (e.g., selected from dropdown)
@@ -61,36 +63,42 @@ export default function PurchasesPage() {
     }
     // If not found by ID, or ID not provided, try by name (case-insensitive, trimmed)
     if (!existingSupplier) {
-        existingSupplier = suppliers.find(s => s.name.toLowerCase() === supplierNameToUse.toLowerCase());
+        existingSupplier = suppliers.find(s => s.name.trim().toLowerCase() === formSupplierNameTrimmed.toLowerCase());
     }
 
     if (existingSupplier) {
-        // Update existing supplier
-        const updatedSuppliers = suppliers.map(s =>
-            s.id === existingSupplier!.id
-            ? {
-                ...s,
-                name: supplierNameToUse, // Allow name update if user changed it slightly
-                contactPerson: data.supplierContactPerson || s.contactPerson,
-                email: data.supplierEmail || s.email,
-                phone: data.supplierPhone || s.phone,
-              }
-            : s
-        );
-        setSuppliers(updatedSuppliers);
         supplierIdToUse = existingSupplier.id;
-        supplierNameToUse = supplierNameToUse; // Use the (potentially updated) name from form
-        if(data.supplierContactPerson || data.supplierEmail || data.supplierPhone){
-             toast({
+        nameForPurchaseRecord = formSupplierNameTrimmed; // PO record takes name from form
+
+        // Check if any details actually changed to warrant an "Updated" toast
+        const nameActuallyChanged = existingSupplier.name.trim() !== formSupplierNameTrimmed;
+        const contactPersonActuallyChanged = (data.supplierContactPerson || "") !== (existingSupplier.contactPerson || "");
+        const emailActuallyChanged = (data.supplierEmail || "") !== (existingSupplier.email || "");
+        const phoneActuallyChanged = (data.supplierPhone || "") !== (existingSupplier.phone || "");
+
+        if (nameActuallyChanged || contactPersonActuallyChanged || emailActuallyChanged || phoneActuallyChanged) {
+            const updatedSuppliers = suppliers.map(s =>
+                s.id === existingSupplier!.id
+                ? { // This object is the updated supplier
+                    ...s,
+                    name: formSupplierNameTrimmed, // Standardize the name in the suppliers list to the form's input
+                    contactPerson: data.supplierContactPerson || s.contactPerson,
+                    email: data.supplierEmail || s.email,
+                    phone: data.supplierPhone || s.phone,
+                  }
+                : s
+            );
+            setSuppliers(updatedSuppliers);
+            toast({
                 title: "Supplier Updated",
-                description: `Details for ${supplierNameToUse} updated.`,
+                description: `Details for ${formSupplierNameTrimmed} updated.`,
             });
         }
     } else {
         // New supplier
         const newSupplierData: Supplier = {
             id: `SUP${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2,3).toUpperCase()}`,
-            name: supplierNameToUse,
+            name: formSupplierNameTrimmed, // Name from form
             contactPerson: data.supplierContactPerson,
             email: data.supplierEmail,
             phone: data.supplierPhone,
@@ -98,19 +106,19 @@ export default function PurchasesPage() {
         };
         setSuppliers(prevSuppliers => [newSupplierData, ...prevSuppliers]);
         supplierIdToUse = newSupplierData.id;
-        // supplierNameToUse remains supplierNameToUse
+        nameForPurchaseRecord = formSupplierNameTrimmed; // Name from form
         toast({
             title: "New Supplier Added",
-            description: `${supplierNameToUse} has been added to suppliers list.`,
+            description: `${formSupplierNameTrimmed} has been added to suppliers list.`,
         });
     }
 
 
     const newPurchase: Purchase = {
       id: newPurchaseId,
-      date: data.purchaseDate!.toISOString(), // purchaseDate is now guaranteed by form validation
-      supplierId: supplierIdToUse,
-      supplierName: supplierNameToUse,
+      date: data.purchaseDate!.toISOString(), 
+      supplierId: supplierIdToUse!,
+      supplierName: nameForPurchaseRecord,
       supplierInvoiceNumber: data.supplierInvoiceNumber,
       items: data.items.map(item => ({
         partNumber: item.partNumber,
@@ -142,10 +150,10 @@ export default function PurchasesPage() {
         title: "Inventory Updated",
         description: "Stock levels increased for received items.",
       });
-    } else {
+    } else if (newPurchase.status !== 'Cancelled') { // Don't show this note for cancelled POs
         toast({
             title: "Note on Inventory",
-            description: `Inventory stock is NOT updated for PO status '${newPurchase.status}'. Change status to 'Received' and handle stock manually or re-create PO if items are received.`,
+            description: `Inventory stock is NOT updated for PO status '${newPurchase.status}'. To update stock, change status to 'Received' and handle stock manually, or recreate the PO if items are now received.`,
             duration: 9000,
         });
     }
@@ -154,7 +162,7 @@ export default function PurchasesPage() {
     setPurchases(prevPurchases => [newPurchase, ...prevPurchases].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     toast({
       title: "Purchase Order Recorded",
-      description: `PO ID ${newPurchase.id} from ${supplierNameToUse} has been recorded.`,
+      description: `PO ID ${newPurchase.id} from ${nameForPurchaseRecord} has been recorded.`,
     });
     setIsPurchaseFormOpen(false);
   };
@@ -171,8 +179,8 @@ export default function PurchasesPage() {
     );
     toast({
       title: "Status Updated",
-      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Note: This action does not automatically adjust inventory stock levels.`,
-      duration: 7000,
+      description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Note: This action does not automatically adjust inventory stock levels. Please manage stock adjustments manually if required.`,
+      duration: 8000,
     });
   };
 
@@ -187,7 +195,7 @@ export default function PurchasesPage() {
      (purchase.supplierId && purchase.supplierId.toLowerCase().includes(searchTerm.toLowerCase()))
     ) &&
     (statusFilters[purchase.status])
-  ); // No need to sort here, already sorted when set
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   const getStatusColor = (status: Purchase['status']) => {
     switch (status) {
@@ -223,7 +231,7 @@ export default function PurchasesPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Purchase History</CardTitle>
-            <CardDescription>Review all recorded purchase orders. Inventory is updated when PO status is 'Received' upon creation. Changing status later does not auto-adjust stock.</CardDescription>
+            <CardDescription>Review all recorded purchase orders. Inventory is updated when a PO is created with 'Received' status. Changing status later does not auto-adjust stock.</CardDescription>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -303,7 +311,7 @@ export default function PurchasesPage() {
             </Table>
              {filteredPurchases.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    {purchases.length > 0 && searchTerm ? 'No purchase orders match your search.' : 'No purchase orders recorded yet. Create one to get started.'}
+                    {purchases.length > 0 && (searchTerm || !Object.values(statusFilters).every(v => v)) ? 'No purchase orders match your search or filter criteria.' : 'No purchase orders recorded yet. Create one to get started.'}
                 </div>
             )}
           </CardContent>
@@ -326,3 +334,4 @@ export default function PurchasesPage() {
     </AppLayout>
   );
 }
+
