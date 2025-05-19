@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Search, Filter } from 'lucide-react';
+import { PlusCircle, Search, Filter, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -21,8 +21,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Purchase, Part, Supplier } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
+import { PurchaseOrderViewDialog } from '@/components/purchases/PurchaseOrderViewDialog'; // New Import
 import { format } from 'date-fns';
-import { cn } from '@/lib/utils'; // Added import for cn
+import { cn } from '@/lib/utils';
 
 const initialMockPurchases: Purchase[] = []; 
 
@@ -34,6 +35,8 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>('autocentral-suppliers', []);
 
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false);
+  const [isPurchaseViewOpen, setIsPurchaseViewOpen] = useState(false); // New state for view dialog
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null); // New state for selected PO
   
   const purchaseStatuses: Purchase['status'][] = ['Pending', 'Ordered', 'Partially Received', 'Received', 'Cancelled'];
   const [statusFilters, setStatusFilters] = useState<Record<Purchase['status'], boolean>>({
@@ -51,15 +54,13 @@ export default function PurchasesPage() {
     let supplierIdToUse = data.supplierId;
     let supplierNameToUse = data.supplierName;
 
-    // Check and update/create supplier
     const existingSupplierByName = suppliers.find(s => s.name.toLowerCase() === data.supplierName.toLowerCase());
     
-    if (data.supplierId && existingSupplierByName && data.supplierId === existingSupplierByName.id) { // Existing supplier selected and ID matches
-      // Update existing supplier's contact details if they were changed in the form
+    if (data.supplierId && existingSupplierByName && data.supplierId === existingSupplierByName.id) {
       const updatedSuppliers = suppliers.map(s => 
         s.id === data.supplierId 
         ? { ...s, 
-            name: data.supplierName, // Name might be slightly different casing, use form's
+            name: data.supplierName, 
             contactPerson: data.supplierContactPerson || s.contactPerson,
             email: data.supplierEmail || s.email,
             phone: data.supplierPhone || s.phone,
@@ -69,7 +70,7 @@ export default function PurchasesPage() {
       setSuppliers(updatedSuppliers);
       supplierIdToUse = data.supplierId;
       supplierNameToUse = data.supplierName;
-    } else if (existingSupplierByName && !data.supplierId) { // Typed name matches existing supplier, but wasn't selected via ID (e.g. new entry matching old name)
+    } else if (existingSupplierByName && !data.supplierId) {
        const updatedSuppliers = suppliers.map(s => 
         s.id === existingSupplierByName.id
         ? { ...s, 
@@ -81,13 +82,12 @@ export default function PurchasesPage() {
       );
       setSuppliers(updatedSuppliers);
       supplierIdToUse = existingSupplierByName.id;
-      supplierNameToUse = existingSupplierByName.name; // Use canonical name
+      supplierNameToUse = existingSupplierByName.name;
       toast({
         title: "Supplier Updated",
         description: `Details for ${existingSupplierByName.name} updated.`,
       });
-    }
-     else { // New supplier
+    } else if (!existingSupplierByName) { 
       const newSupplier: Supplier = {
         id: `SUP${Date.now().toString().slice(-5)}`,
         name: data.supplierName,
@@ -105,9 +105,10 @@ export default function PurchasesPage() {
       });
     }
 
+
     const newPurchase: Purchase = {
       id: newPurchaseId,
-      date: data.purchaseDate!.toISOString(), // purchaseDate is now guaranteed by form validation
+      date: data.purchaseDate!.toISOString(),
       supplierId: supplierIdToUse,
       supplierName: supplierNameToUse,
       supplierInvoiceNumber: data.supplierInvoiceNumber,
@@ -127,7 +128,6 @@ export default function PurchasesPage() {
       notes: data.notes,
     };
 
-    // Update inventory only if status is 'Received'
     if (newPurchase.status === 'Received') {
       const updatedInventory = inventoryParts.map(part => {
         const purchasedItem = newPurchase.items.find(item => item.partNumber === part.partNumber);
@@ -157,13 +157,16 @@ export default function PurchasesPage() {
         p.id === purchaseId ? { ...p, status: newStatus } : p
       )
     );
-    // Note: Inventory is NOT adjusted here. This is a known simplification.
-    // A more complex system would track received quantities or handle inventory based on status transitions.
     toast({
       title: "Status Updated",
       description: `Purchase Order ${purchaseId} status changed to ${newStatus}. Inventory stock levels are not automatically adjusted by this status change alone.`,
       duration: 7000,
     });
+  };
+
+  const handleViewPurchaseDetails = (purchase: Purchase) => {
+    setSelectedPurchase(purchase);
+    setIsPurchaseViewOpen(true);
   };
 
   const filteredPurchases = purchases.filter(purchase =>
@@ -172,7 +175,7 @@ export default function PurchasesPage() {
      (purchase.supplierId && purchase.supplierId.toLowerCase().includes(searchTerm.toLowerCase()))
     ) &&
     (statusFilters[purchase.status])
-  );
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort by date descending
   
   const getStatusColor = (status: Purchase['status']) => {
     switch (status) {
@@ -251,6 +254,7 @@ export default function PurchasesPage() {
                   <TableHead>Supplier</TableHead>
                   <TableHead className="text-right">Net Amount</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -275,6 +279,12 @@ export default function PurchasesPage() {
                         </SelectContent>
                        </Select>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewPurchaseDetails(purchase)}>
+                        <FileText className="h-4 w-4" />
+                         <span className="sr-only">View Details</span>
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -294,7 +304,13 @@ export default function PurchasesPage() {
         inventoryParts={inventoryParts}
         inventorySuppliers={suppliers}
       />
+       {selectedPurchase && (
+        <PurchaseOrderViewDialog
+            isOpen={isPurchaseViewOpen}
+            onOpenChange={setIsPurchaseViewOpen}
+            purchaseOrder={selectedPurchase}
+        />
+      )}
     </AppLayout>
   );
 }
-
