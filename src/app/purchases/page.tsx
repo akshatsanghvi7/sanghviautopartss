@@ -22,6 +22,7 @@ import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Purchase, Part, Supplier } from '@/lib/types';
 import { PurchaseFormDialog, type PurchaseFormData } from '@/components/purchases/PurchaseFormDialog';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils'; // Added import for cn
 
 const initialMockPurchases: Purchase[] = []; 
 
@@ -296,3 +297,4 @@ export default function PurchasesPage() {
     </AppLayout>
   );
 }
+
