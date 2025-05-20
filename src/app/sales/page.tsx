@@ -90,11 +90,17 @@ export default function SalesPage() {
 
       if (existingCustomerIndex !== -1) {
         const existingCustomer = updatedCustomers[existingCustomerIndex];
-        let newBalance = existingCustomer.balance;
+        
+        let currentBalanceAsNumber = Number(existingCustomer.balance);
+        if (isNaN(currentBalanceAsNumber)) {
+            currentBalanceAsNumber = 0;
+        }
+        let newBalance = currentBalanceAsNumber;
+
         if (newSale.paymentType === 'credit') {
           newBalance += newSale.netAmount;
         }
-        // Update existing customer's details if provided and different
+        
         updatedCustomers[existingCustomerIndex] = {
           ...existingCustomer,
           email: newSale.emailAddress || existingCustomer.email,
@@ -150,7 +156,13 @@ export default function SalesPage() {
       setCustomers(prevCustomers => 
         prevCustomers.map(c => {
           if (c.name.toLowerCase() === saleBuyerName!.toLowerCase()) {
-            let newBalance = c.balance;
+            
+            let currentBalanceAsNumber = Number(c.balance);
+            if (isNaN(currentBalanceAsNumber)) {
+                currentBalanceAsNumber = 0;
+            }
+            let newBalance = currentBalanceAsNumber;
+
             if (newPaymentType === 'cash' && oldPaymentType === 'credit') { // Was credit, now cash
               newBalance -= saleAmount;
             } else if (newPaymentType === 'credit' && oldPaymentType === 'cash') { // Was cash, now credit
