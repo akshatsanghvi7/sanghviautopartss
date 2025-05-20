@@ -1,15 +1,69 @@
 
+"use client";
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
+import { DollarSign, Package, Users, ShoppingCart, AlertTriangle, CheckCircle2, ListChecks } from 'lucide-react';
+import useLocalStorage from '@/hooks/useLocalStorage';
+import type { Sale, Part } from '@/lib/types';
+import { useMemo } from 'react';
+import { startOfDay, endOfDay, isWithinInterval, parseISO, format, getYear, setMonth, setDate, isBefore } from 'date-fns';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from '@/components/ui/table';
 
 export default function DashboardPage() {
-  // Placeholder data - in a real app, this would come from state or API
+  const [sales] = useLocalStorage<Sale[]>('autocentral-sales', []);
+  const [inventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []);
+
+  const dashboardData = useMemo(() => {
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const todayEnd = endOfDay(now);
+
+    // Fiscal year starts April 1st
+    let fiscalYearStart = setDate(setMonth(now, 3), 1); // April is month 3 (0-indexed)
+    if (isBefore(now, fiscalYearStart)) {
+      fiscalYearStart = setDate(setMonth(now, 3), 1);
+      fiscalYearStart.setFullYear(getYear(now) - 1);
+    }
+    fiscalYearStart = startOfDay(fiscalYearStart);
+
+    const salesInFiscalYear = sales.filter(sale => {
+      const saleDate = parseISO(sale.date);
+      return isWithinInterval(saleDate, { start: fiscalYearStart, end: now });
+    });
+    const totalRevenue = salesInFiscalYear.reduce((acc, sale) => acc + sale.netAmount, 0);
+
+    const partsInStock = inventoryParts.reduce((acc, part) => acc + part.quantity, 0);
+
+    const activeCustomers = new Set(sales.map(sale => sale.buyerName.toLowerCase())).size;
+    
+    const salesTodayCount = sales.filter(sale => {
+        const saleDate = parseISO(sale.date);
+        return isWithinInterval(saleDate, { start: todayStart, end: todayEnd });
+    }).length;
+
+    const recentSales = [...sales]
+        .sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
+        .slice(0, 7);
+
+    const lowStockItems = inventoryParts.filter(part => part.quantity <= 1);
+
+    return {
+      totalRevenue,
+      partsInStock,
+      activeCustomers,
+      salesTodayCount,
+      recentSales,
+      lowStockItems
+    };
+  }, [sales, inventoryParts]);
+
   const summaryStats = [
-    { title: "Total Revenue", value: "₹125,670", icon: DollarSign, change: "+12.5%", changeType: "positive" as const, dataAiHint: "money chart" },
-    { title: "Parts in Stock", value: "1,890", icon: Package, change: "-2.1%", changeType: "negative" as const, dataAiHint: "inventory boxes" },
-    { title: "Active Customers", value: "342", icon: Users, change: "+5", changeType: "positive" as const, dataAiHint: "people community" },
-    { title: "Sales Today", value: "28", icon: ShoppingCart, change: "+8.0%", changeType: "positive" as const, dataAiHint: "shopping cart" },
+    { title: "Total Revenue (Fiscal Year)", value: `₹${dashboardData.totalRevenue.toFixed(2)}`, icon: DollarSign, dataAiHint: "money chart", subtitle: `Since ${format(startOfDay(setDate(setMonth(new Date(), 3), 1)), "MMM d")}` },
+    { title: "Parts in Stock", value: dashboardData.partsInStock.toLocaleString(), icon: Package, dataAiHint: "inventory boxes", subtitle: "Total units available" },
+    { title: "Active Customers", value: dashboardData.activeCustomers.toLocaleString(), icon: Users, dataAiHint: "people community", subtitle: "Unique buyers from sales" },
+    { title: "Sales Today", value: dashboardData.salesTodayCount.toLocaleString(), icon: ShoppingCart, dataAiHint: "shopping cart", subtitle: "Transactions recorded today" },
   ];
 
   return (
@@ -28,9 +82,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-                <p className={`text-xs ${stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'} dark:text-opacity-80`}>
-                  {stat.change} from last month
-                </p>
+                {stat.subtitle && <p className="text-xs text-muted-foreground">{stat.subtitle}</p>}
               </CardContent>
             </Card>
           ))}
@@ -40,25 +92,71 @@ export default function DashboardPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Recent Sales</CardTitle>
-              <CardDescription>Overview of the latest transactions.</CardDescription>
+              <CardDescription>Latest 7 transactions.</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Placeholder for recent sales chart or list */}
-              <div className="flex items-center justify-center h-60 border-2 border-dashed border-border rounded-md bg-muted/30">
-                <p className="text-muted-foreground">Recent Sales Data (Coming Soon)</p>
-              </div>
+              {dashboardData.recentSales.length > 0 ? (
+                <ScrollArea className="h-72 custom-scrollbar">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sale ID</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboardData.recentSales.map(sale => (
+                        <TableRow key={sale.id}>
+                          <TableCell className="font-medium">{sale.id}</TableCell>
+                          <TableCell>{sale.buyerName}</TableCell>
+                          <TableCell className="text-right">₹{sale.netAmount.toFixed(2)}</TableCell>
+                          <TableCell>{format(parseISO(sale.date), "PPp")}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-60 border-2 border-dashed border-border rounded-md bg-muted/30">
+                  <p className="text-muted-foreground flex items-center gap-2"><ListChecks className="h-5 w-5" /> No recent sales data found.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Low Stock Items</CardTitle>
-              <CardDescription>Parts that need reordering soon.</CardDescription>
+              <CardDescription>Parts with quantity less than or equal to 1.</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Placeholder for low stock items list */}
-               <div className="flex items-center justify-center h-60 border-2 border-dashed border-border rounded-md bg-muted/30">
-                <p className="text-muted-foreground">Low Stock Items (Coming Soon)</p>
-              </div>
+              {dashboardData.lowStockItems.length > 0 ? (
+                <ScrollArea className="h-72 custom-scrollbar">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Part Name</TableHead>
+                        <TableHead>Part No.</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboardData.lowStockItems.map(part => (
+                        <TableRow key={`${part.partNumber}-${part.mrp}`}>
+                           <TableCell className="font-medium">{part.partName}</TableCell>
+                           <TableCell>{part.partNumber}</TableCell>
+                           <TableCell className="text-right text-destructive font-semibold">{part.quantity}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-60 border-2 border-dashed border-border rounded-md bg-muted/30">
+                  <p className="text-muted-foreground flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-green-500" /> All items well stocked.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
