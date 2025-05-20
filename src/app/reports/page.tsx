@@ -4,7 +4,7 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, FileText, Download, ShoppingCart, PackageSearch, TrendingUp, LineChart } from 'lucide-react';
+import { BarChart3, FileText, ShoppingCart, PackageSearch, TrendingUp, LineChart } from 'lucide-react';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import React, { useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
@@ -92,7 +92,7 @@ export default function ReportsPage() {
     setReportDisplayStates(prev => ({ ...prev, [id]: { ...prev[id], ...updates } }));
   };
 
-  const parseMrp = (mrpString: string): number => {
+  const parseMrp = (mrpString?: string): number => {
     if (!mrpString) return 0;
     const numericValue = parseFloat(String(mrpString).replace(/[^0-9.-]+/g,""));
     return isNaN(numericValue) ? 0 : numericValue;
@@ -124,7 +124,7 @@ export default function ReportsPage() {
         setSalesSummaryData({
             totalSales: 0, cashSales: 0, creditSales: 0, highestSellingProduct: null, numberOfTransactions: 0
         });
-        updateReportState("sales-summary", { isLoading: false, dataGenerated: true });
+        updateReportState("sales-summary", { isLoading: false, dataGenerated: true, message: "No sales data found for the selected period." });
         return;
       }
 
@@ -193,7 +193,7 @@ export default function ReportsPage() {
         setPurchaseSummaryData({
             totalPurchases: 0, numberOfPurchaseOrders: 0, mostFrequentPart: null, topSupplierByValue: null
         });
-        updateReportState("purchase-summary", { isLoading: false, dataGenerated: true });
+        updateReportState("purchase-summary", { isLoading: false, dataGenerated: true, message: "No purchase data found for the selected period." });
         return;
       }
 
@@ -204,10 +204,11 @@ export default function ReportsPage() {
       filteredPurchases.forEach(purchase => {
         totalPurchases += purchase.netAmount;
         
-        if (!supplierValues[purchase.supplierId || purchase.supplierName]) {
-          supplierValues[purchase.supplierId || purchase.supplierName] = { name: purchase.supplierName, totalValue: 0 };
+        const supplierKey = purchase.supplierId || purchase.supplierName.toLowerCase();
+        if (!supplierValues[supplierKey]) {
+          supplierValues[supplierKey] = { name: purchase.supplierName, totalValue: 0 };
         }
-        supplierValues[purchase.supplierId || purchase.supplierName].totalValue += purchase.netAmount;
+        supplierValues[supplierKey].totalValue += purchase.netAmount;
 
         purchase.items.forEach(item => {
           if (!partQuantities[item.partNumber]) {
@@ -255,7 +256,7 @@ export default function ReportsPage() {
         });
         setInventoryValuationData({
             totalValue,
-            numberOfUniqueParts: inventoryParts.length, // Assuming each entry is unique by partNumber + MRP combo
+            numberOfUniqueParts: inventoryParts.length, 
             totalQuantityOfParts: totalQuantity,
         });
         updateReportState("inventory-valuation", { isLoading: false, dataGenerated: true });
@@ -309,7 +310,7 @@ export default function ReportsPage() {
     if (requiresDateRange && (!dateRange || !dateRange.from || !dateRange.to)) {
       toast({
         title: "Date Range Required",
-        description: `Please select a valid date range to generate the ${reportId.replace('-', ' ')}.`,
+        description: `Please select a valid date range to generate the ${reportId.replace('-', ' ')} report.`,
         variant: "destructive",
       });
       return;
@@ -328,16 +329,9 @@ export default function ReportsPage() {
     }
   };
 
-  const handleDownloadReport = (reportId: string) => {
-     toast({
-        title: "Download Not Implemented",
-        description: `Download functionality for ${reportId.replace('-', ' ')} is not yet available.`,
-      });
-  }
-
   const chartConfig = {
-    purchased: { label: "Purchased Qty", color: "hsl(var(--chart-1))" }, // Reddish
-    sold: { label: "Sold Qty", color: "hsl(var(--chart-2))" }, // Greenish
+    purchased: { label: "Purchased Qty", color: "hsl(var(--chart-1))" }, // Reddish for purchases
+    sold: { label: "Sold Qty", color: "hsl(var(--chart-2))" }, // Greenish for sales
   } satisfies ReturnType<typeof useChart>["config"];
 
 
@@ -347,11 +341,15 @@ export default function ReportsPage() {
     if (state.isLoading) {
         return <div className="flex justify-center items-center h-full"><svg className="animate-spin h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>;
     }
+    
+    if (state.message) {
+        return <p className="text-muted-foreground p-2">{state.message}</p>;
+    }
 
     if (!state.dataGenerated) {
         const requiresDateRange = report.id === "sales-summary" || report.id === "purchase-summary";
         return (
-            <div className="text-center">
+            <div className="text-center p-2">
                 <report.icon className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                 <p className="text-muted-foreground">
                     {requiresDateRange ? "Select a date range and click \"View Report\"." : "Click \"View Report\" to generate."}
@@ -361,11 +359,8 @@ export default function ReportsPage() {
     }
 
     if (report.id === "sales-summary" && salesSummaryData) {
-        if (salesSummaryData.numberOfTransactions === 0) {
-            return <p className="text-muted-foreground">No sales data found for the selected period.</p>;
-        }
         return (
-            <div className="space-y-1 text-left w-full text-sm">
+            <div className="space-y-1 text-left w-full text-sm p-2">
                 <p><strong>Total Sales:</strong> ₹{salesSummaryData.totalSales.toFixed(2)}</p>
                 <p><strong>Cash Sales:</strong> ₹{salesSummaryData.cashSales.toFixed(2)}</p>
                 <p><strong>Credit Sales:</strong> ₹{salesSummaryData.creditSales.toFixed(2)}</p>
@@ -380,11 +375,8 @@ export default function ReportsPage() {
     }
 
     if (report.id === "purchase-summary" && purchaseSummaryData) {
-        if (purchaseSummaryData.numberOfPurchaseOrders === 0) {
-            return <p className="text-muted-foreground">No purchase data found for the selected period.</p>;
-        }
         return (
-            <div className="space-y-1 text-left w-full text-sm">
+            <div className="space-y-1 text-left w-full text-sm p-2">
                 <p><strong>Total Purchases:</strong> ₹{purchaseSummaryData.totalPurchases.toFixed(2)}</p>
                 <p><strong>Purchase Orders:</strong> {purchaseSummaryData.numberOfPurchaseOrders}</p>
                 {purchaseSummaryData.mostFrequentPart ? (
@@ -403,7 +395,7 @@ export default function ReportsPage() {
     
     if (report.id === "inventory-valuation" && inventoryValuationData) {
         return (
-            <div className="space-y-1 text-left w-full text-sm">
+            <div className="space-y-1 text-left w-full text-sm p-2">
                 <p><strong>Total Inventory Value (MRP):</strong> ₹{inventoryValuationData.totalValue.toFixed(2)}</p>
                 <p><strong>Unique Part Entries:</strong> {inventoryValuationData.numberOfUniqueParts}</p>
                 <p><strong>Total Quantity of All Parts:</strong> {inventoryValuationData.totalQuantityOfParts} units</p>
@@ -413,10 +405,10 @@ export default function ReportsPage() {
     
     if (report.id === "stock-movement" && stockMovementData) {
       if (!stockMovementData.hasData) {
-        return <p className="text-muted-foreground">No stock movement data for the last 7 days.</p>;
+        return <p className="text-muted-foreground p-2">No stock movement data for the last 7 days.</p>;
       }
       return (
-        <ChartContainer config={chartConfig} className="h-full w-full">
+        <ChartContainer config={chartConfig} className="h-full w-full p-1">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={stockMovementData.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -432,11 +424,7 @@ export default function ReportsPage() {
       );
     }
 
-    if (state.message) {
-      return <p className="text-muted-foreground">{state.message}</p>;
-    }
-
-    return <p className="text-muted-foreground">Click "View Report" to generate.</p>;
+    return <p className="text-muted-foreground p-2">Click "View Report" to generate.</p>;
   };
 
 
@@ -459,28 +447,18 @@ export default function ReportsPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <report.icon className="h-8 w-8 text-primary mb-2" />
-                   <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-muted-foreground hover:text-primary" 
-                      onClick={() => handleDownloadReport(report.id)}
-                      disabled={
-                        report.id === "profit-loss" ||
-                        (report.id === "sales-summary" && !salesSummaryData) ||
-                        (report.id === "purchase-summary" && !purchaseSummaryData) ||
-                        (report.id === "inventory-valuation" && !inventoryValuationData) ||
-                        (report.id === "stock-movement" && !stockMovementData)
-                      }
-                    >
-                      <Download className="h-5 w-5" />
-                      <span className="sr-only">Download Report</span>
-                   </Button>
+                  {/* Download button removed */}
                 </div>
                 <CardTitle className="text-xl">{report.name}</CardTitle>
-                <CardDescription>{report.description}</CardDescription>
+                <CardDescription>
+                    {report.description}
+                    {(report.id === "inventory-valuation" || report.id === "stock-movement" || report.id === "profit-loss") && 
+                     (reportDisplayStates[report.id].message || (!reportDisplayStates[report.id].dataGenerated && !reportDisplayStates[report.id].isLoading)) ? 
+                     "" : ""}
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow flex flex-col">
-                <div className="h-48 bg-muted/30 rounded-md flex flex-col items-center justify-center border-2 border-dashed border-border mb-4 p-1 text-sm overflow-hidden" data-ai-hint={report.dataAiHint}>
+                <div className="h-48 bg-muted/30 rounded-md flex flex-col items-center justify-center border-2 border-dashed border-border mb-4 text-sm overflow-hidden" data-ai-hint={report.dataAiHint}>
                   {renderReportContent(report)}
                 </div>
                 <Button 
@@ -510,5 +488,7 @@ function useChart() {
     }
   }
 }
+
+    
 
     
