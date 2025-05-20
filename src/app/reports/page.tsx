@@ -4,14 +4,16 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, FileText, Download, AlertCircle, CalendarDays, ShoppingCart, PackageSearch, TrendingUp } from 'lucide-react';
+import { BarChart3, FileText, Download, ShoppingCart, PackageSearch, TrendingUp, LineChart } from 'lucide-react';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Sale, Purchase, Part } from '@/lib/types';
+import type { Sale, Purchase, Part, SaleItem, PurchaseItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { addDays, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { addDays, isWithinInterval, parseISO, startOfDay, endOfDay, format as formatDate, subDays } from 'date-fns';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from "recharts"
 
 interface SalesSummaryData {
   totalSales: number;
@@ -28,6 +30,23 @@ interface PurchaseSummaryData {
   topSupplierByValue: { name: string; totalValue: number; supplierId: string } | null;
 }
 
+interface InventoryValuationData {
+  totalValue: number;
+  numberOfUniqueParts: number;
+  totalQuantityOfParts: number;
+}
+
+interface StockMovementEntry {
+  date: string;
+  purchased: number;
+  sold: number;
+}
+interface StockMovementData {
+  data: StockMovementEntry[];
+  hasData: boolean;
+}
+
+
 type ReportId = "sales-summary" | "purchase-summary" | "inventory-valuation" | "profit-loss" | "stock-movement";
 
 interface ReportCardDisplayState {
@@ -37,11 +56,11 @@ interface ReportCardDisplayState {
 }
 
 const initialReportTypes = [
-    { id: "sales-summary" as ReportId, name: "Sales Summary", description: "Overview of sales performance.", icon: BarChart3, dataAiHint: "sales graph", disabled: false },
-    { id: "purchase-summary" as ReportId, name: "Purchase Summary", description: "Overview of purchase activities.", icon: ShoppingCart, dataAiHint: "purchase graph", disabled: false },
-    { id: "inventory-valuation" as ReportId, name: "Inventory Valuation", description: "Current value of your stock.", icon: PackageSearch, dataAiHint: "inventory document", disabled: false },
-    { id: "profit-loss" as ReportId, name: "Profit & Loss", description: "Financial performance overview.", icon: TrendingUp, dataAiHint: "financial chart", disabled: false },
-    { id: "stock-movement" as ReportId, name: "Stock Movement", description: "History of inventory changes.", icon: FileText, dataAiHint: "inventory flow", disabled: false },
+    { id: "sales-summary" as ReportId, name: "Sales Summary", description: "Overview of sales performance within selected date range.", icon: BarChart3, dataAiHint: "sales graph", disabled: false },
+    { id: "purchase-summary" as ReportId, name: "Purchase Summary", description: "Overview of purchase activities within selected date range.", icon: ShoppingCart, dataAiHint: "purchase graph", disabled: false },
+    { id: "inventory-valuation" as ReportId, name: "Inventory Valuation", description: "Calculates the total current value of your on-hand stock based on MRP.", icon: PackageSearch, dataAiHint: "inventory value document", disabled: false },
+    { id: "stock-movement" as ReportId, name: "Stock Movement", description: "Visualizes parts purchased vs. sold over the last 7 days.", icon: LineChart, dataAiHint: "stock activity chart", disabled: false },
+    { id: "profit-loss" as ReportId, name: "Profit & Loss", description: "Financial performance overview. (Coming Soon)", icon: TrendingUp, dataAiHint: "financial chart", disabled: false },
 ];
 
 export default function ReportsPage() {
@@ -51,17 +70,20 @@ export default function ReportsPage() {
   });
   const [sales] = useLocalStorage<Sale[]>('autocentral-sales', []);
   const [purchases] = useLocalStorage<Purchase[]>('autocentral-purchases', []);
+  const [inventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []);
   const { toast } = useToast();
 
   const [salesSummaryData, setSalesSummaryData] = useState<SalesSummaryData | null>(null);
   const [purchaseSummaryData, setPurchaseSummaryData] = useState<PurchaseSummaryData | null>(null);
+  const [inventoryValuationData, setInventoryValuationData] = useState<InventoryValuationData | null>(null);
+  const [stockMovementData, setStockMovementData] = useState<StockMovementData | null>(null);
   
   const initialDisplayStates: Record<ReportId, ReportCardDisplayState> = {
     "sales-summary": { isLoading: false, dataGenerated: false },
     "purchase-summary": { isLoading: false, dataGenerated: false },
-    "inventory-valuation": { isLoading: false, dataGenerated: false, message: "Detailed report coming soon..." },
+    "inventory-valuation": { isLoading: false, dataGenerated: false },
+    "stock-movement": { isLoading: false, dataGenerated: false },
     "profit-loss": { isLoading: false, dataGenerated: false, message: "Detailed report coming soon..." },
-    "stock-movement": { isLoading: false, dataGenerated: false, message: "Detailed report coming soon..." },
   };
   const [reportDisplayStates, setReportDisplayStates] = useState<Record<ReportId, ReportCardDisplayState>>(initialDisplayStates);
 
@@ -69,6 +91,13 @@ export default function ReportsPage() {
   const updateReportState = (id: ReportId, updates: Partial<ReportCardDisplayState>) => {
     setReportDisplayStates(prev => ({ ...prev, [id]: { ...prev[id], ...updates } }));
   };
+
+  const parseMrp = (mrpString: string): number => {
+    if (!mrpString) return 0;
+    const numericValue = parseFloat(String(mrpString).replace(/[^0-9.-]+/g,""));
+    return isNaN(numericValue) ? 0 : numericValue;
+  };
+
 
   const handleGenerateSalesSummary = () => {
     if (!dateRange || !dateRange.from || !dateRange.to) {
@@ -82,7 +111,7 @@ export default function ReportsPage() {
     updateReportState("sales-summary", { isLoading: true, dataGenerated: false });
     setSalesSummaryData(null);
 
-    setTimeout(() => {
+    setTimeout(() => { // Simulate API call
       const fromDate = startOfDay(dateRange.from!);
       const toDate = endOfDay(dateRange.to!);
 
@@ -151,7 +180,7 @@ export default function ReportsPage() {
     updateReportState("purchase-summary", { isLoading: true, dataGenerated: false });
     setPurchaseSummaryData(null);
 
-    setTimeout(() => {
+    setTimeout(() => { // Simulate API call
       const fromDate = startOfDay(dateRange.from!);
       const toDate = endOfDay(dateRange.to!);
 
@@ -212,49 +241,121 @@ export default function ReportsPage() {
       updateReportState("purchase-summary", { isLoading: false, dataGenerated: true });
     }, 500);
   };
+
+  const handleGenerateInventoryValuation = () => {
+    updateReportState("inventory-valuation", { isLoading: true, dataGenerated: false });
+    setInventoryValuationData(null);
+    
+    setTimeout(() => {
+        let totalValue = 0;
+        let totalQuantity = 0;
+        inventoryParts.forEach(part => {
+            totalValue += part.quantity * parseMrp(part.mrp);
+            totalQuantity += part.quantity;
+        });
+        setInventoryValuationData({
+            totalValue,
+            numberOfUniqueParts: inventoryParts.length, // Assuming each entry is unique by partNumber + MRP combo
+            totalQuantityOfParts: totalQuantity,
+        });
+        updateReportState("inventory-valuation", { isLoading: false, dataGenerated: true });
+    }, 300);
+  };
   
+  const handleGenerateStockMovement = () => {
+    updateReportState("stock-movement", { isLoading: true, dataGenerated: false });
+    setStockMovementData(null);
+
+    setTimeout(() => {
+        const today = new Date();
+        const last7DaysData: StockMovementEntry[] = [];
+        let hasMovement = false;
+
+        for (let i = 6; i >= 0; i--) {
+            const currentDate = startOfDay(subDays(today, i));
+            const dayEnd = endOfDay(currentDate);
+            
+            let dailySold = 0;
+            sales.forEach(sale => {
+                if (isWithinInterval(parseISO(sale.date), { start: currentDate, end: dayEnd })) {
+                    sale.items.forEach(item => dailySold += item.quantitySold);
+                }
+            });
+
+            let dailyPurchased = 0;
+            purchases.forEach(purchase => {
+                 if (purchase.status === 'Received' && isWithinInterval(parseISO(purchase.date), { start: currentDate, end: dayEnd })) {
+                    purchase.items.forEach(item => dailyPurchased += item.quantityPurchased);
+                }
+            });
+            
+            if (dailySold > 0 || dailyPurchased > 0) {
+                hasMovement = true;
+            }
+
+            last7DaysData.push({
+                date: formatDate(currentDate, "MMM d"),
+                sold: dailySold,
+                purchased: dailyPurchased,
+            });
+        }
+        setStockMovementData({ data: last7DaysData, hasData: hasMovement });
+        updateReportState("stock-movement", { isLoading: false, dataGenerated: true });
+    }, 700);
+  };
+
   const handleViewReport = (reportId: ReportId) => {
-    if (!dateRange || !dateRange.from || !dateRange.to) {
+    const requiresDateRange = reportId === "sales-summary" || reportId === "purchase-summary";
+    if (requiresDateRange && (!dateRange || !dateRange.from || !dateRange.to)) {
       toast({
         title: "Date Range Required",
-        description: "Please select a valid date range.",
+        description: `Please select a valid date range to generate the ${reportId.replace('-', ' ')}.`,
         variant: "destructive",
       });
       return;
     }
+
     if (reportId === "sales-summary") {
       handleGenerateSalesSummary();
     } else if (reportId === "purchase-summary") {
       handleGeneratePurchaseSummary();
-    } else {
-      // For other reports, mark as dataGenerated to show the "coming soon" message
-      updateReportState(reportId, { isLoading: false, dataGenerated: true });
-      // toast({
-      //   title: "Report Not Implemented",
-      //   description: "This report type is not yet available.",
-      // });
+    } else if (reportId === "inventory-valuation") {
+      handleGenerateInventoryValuation();
+    } else if (reportId === "stock-movement") {
+      handleGenerateStockMovement();
+    } else if (reportId === "profit-loss") {
+      updateReportState(reportId, { isLoading: false, dataGenerated: true, message: "Detailed Profit & Loss report coming soon..." });
     }
   };
 
   const handleDownloadReport = (reportId: string) => {
      toast({
         title: "Download Not Implemented",
-        description: `Download functionality for ${reportId} is not yet available.`,
+        description: `Download functionality for ${reportId.replace('-', ' ')} is not yet available.`,
       });
   }
+
+  const chartConfig = {
+    purchased: { label: "Purchased Qty", color: "hsl(var(--chart-1))" }, // Reddish
+    sold: { label: "Sold Qty", color: "hsl(var(--chart-2))" }, // Greenish
+  } satisfies ReturnType<typeof useChart>["config"];
+
 
   const renderReportContent = (report: typeof initialReportTypes[0]) => {
     const state = reportDisplayStates[report.id];
 
     if (state.isLoading) {
-        return <p className="text-muted-foreground">Loading summary...</p>;
+        return <div className="flex justify-center items-center h-full"><svg className="animate-spin h-6 w-6 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>;
     }
 
     if (!state.dataGenerated) {
+        const requiresDateRange = report.id === "sales-summary" || report.id === "purchase-summary";
         return (
             <div className="text-center">
-                <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">Select a date range and click "View Report".</p>
+                <report.icon className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-muted-foreground">
+                    {requiresDateRange ? "Select a date range and click \"View Report\"." : "Click \"View Report\" to generate."}
+                </p>
             </div>
         );
     }
@@ -264,7 +365,7 @@ export default function ReportsPage() {
             return <p className="text-muted-foreground">No sales data found for the selected period.</p>;
         }
         return (
-            <div className="space-y-1 text-left w-full">
+            <div className="space-y-1 text-left w-full text-sm">
                 <p><strong>Total Sales:</strong> ₹{salesSummaryData.totalSales.toFixed(2)}</p>
                 <p><strong>Cash Sales:</strong> ₹{salesSummaryData.cashSales.toFixed(2)}</p>
                 <p><strong>Credit Sales:</strong> ₹{salesSummaryData.creditSales.toFixed(2)}</p>
@@ -283,16 +384,16 @@ export default function ReportsPage() {
             return <p className="text-muted-foreground">No purchase data found for the selected period.</p>;
         }
         return (
-            <div className="space-y-1 text-left w-full">
+            <div className="space-y-1 text-left w-full text-sm">
                 <p><strong>Total Purchases:</strong> ₹{purchaseSummaryData.totalPurchases.toFixed(2)}</p>
                 <p><strong>Purchase Orders:</strong> {purchaseSummaryData.numberOfPurchaseOrders}</p>
                 {purchaseSummaryData.mostFrequentPart ? (
-                    <p><strong>Top Part:</strong> {purchaseSummaryData.mostFrequentPart.name} ({purchaseSummaryData.mostFrequentPart.partNumber}) - {purchaseSummaryData.mostFrequentPart.quantity} units</p>
+                    <p><strong>Top Part Purchased:</strong> {purchaseSummaryData.mostFrequentPart.name} ({purchaseSummaryData.mostFrequentPart.partNumber}) - {purchaseSummaryData.mostFrequentPart.quantity} units</p>
                 ) : (
                     <p>No parts purchased in this period.</p>
                 )}
                 {purchaseSummaryData.topSupplierByValue ? (
-                    <p><strong>Top Supplier:</strong> {purchaseSummaryData.topSupplierByValue.name} - Total Value: ₹{purchaseSummaryData.topSupplierByValue.totalValue.toFixed(2)}</p>
+                    <p><strong>Top Supplier (by value):</strong> {purchaseSummaryData.topSupplierByValue.name} - Total: ₹{purchaseSummaryData.topSupplierByValue.totalValue.toFixed(2)}</p>
                 ) : (
                     <p>No supplier spending in this period.</p>
                 )}
@@ -300,7 +401,37 @@ export default function ReportsPage() {
         );
     }
     
-    // For other reports that are "activated" but not fully implemented
+    if (report.id === "inventory-valuation" && inventoryValuationData) {
+        return (
+            <div className="space-y-1 text-left w-full text-sm">
+                <p><strong>Total Inventory Value (MRP):</strong> ₹{inventoryValuationData.totalValue.toFixed(2)}</p>
+                <p><strong>Unique Part Entries:</strong> {inventoryValuationData.numberOfUniqueParts}</p>
+                <p><strong>Total Quantity of All Parts:</strong> {inventoryValuationData.totalQuantityOfParts} units</p>
+            </div>
+        );
+    }
+    
+    if (report.id === "stock-movement" && stockMovementData) {
+      if (!stockMovementData.hasData) {
+        return <p className="text-muted-foreground">No stock movement data for the last 7 days.</p>;
+      }
+      return (
+        <ChartContainer config={chartConfig} className="h-full w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stockMovementData.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} fontSize={10} />
+              <YAxis tickLine={false} axisLine={false} tickMargin={8} fontSize={10} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="purchased" fill="var(--color-purchased)" radius={4} name="Purchased" />
+              <Bar dataKey="sold" fill="var(--color-sold)" radius={4} name="Sold" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+      );
+    }
+
     if (state.message) {
       return <p className="text-muted-foreground">{state.message}</p>;
     }
@@ -315,7 +446,7 @@ export default function ReportsPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground">Reports</h1>
-                <p className="text-muted-foreground">Generate and view detailed business reports. Select a date range to analyze data.</p>
+                <p className="text-muted-foreground">Generate and view detailed business reports. Date range applies to Sales & Purchase Summaries.</p>
             </div>
             <div>
                 <DatePickerWithRange date={dateRange} onDateChange={setDateRange} />
@@ -334,9 +465,11 @@ export default function ReportsPage() {
                       className="text-muted-foreground hover:text-primary" 
                       onClick={() => handleDownloadReport(report.id)}
                       disabled={
-                        report.id !== "sales-summary" && report.id !== "purchase-summary" || 
+                        report.id === "profit-loss" ||
                         (report.id === "sales-summary" && !salesSummaryData) ||
-                        (report.id === "purchase-summary" && !purchaseSummaryData)
+                        (report.id === "purchase-summary" && !purchaseSummaryData) ||
+                        (report.id === "inventory-valuation" && !inventoryValuationData) ||
+                        (report.id === "stock-movement" && !stockMovementData)
                       }
                     >
                       <Download className="h-5 w-5" />
@@ -347,13 +480,13 @@ export default function ReportsPage() {
                 <CardDescription>{report.description}</CardDescription>
               </CardHeader>
               <CardContent className="flex-grow flex flex-col">
-                <div className="h-48 bg-muted/30 rounded-md flex flex-col items-center justify-center border-2 border-dashed border-border mb-4 p-4 text-sm overflow-y-auto custom-scrollbar" data-ai-hint={report.dataAiHint}>
+                <div className="h-48 bg-muted/30 rounded-md flex flex-col items-center justify-center border-2 border-dashed border-border mb-4 p-1 text-sm overflow-hidden" data-ai-hint={report.dataAiHint}>
                   {renderReportContent(report)}
                 </div>
                 <Button 
                   className="w-full mt-auto" 
                   onClick={() => handleViewReport(report.id)}
-                  disabled={(!dateRange || !dateRange.from || !dateRange.to) && (report.id === "sales-summary" || report.id === "purchase-summary")}
+                  disabled={((report.id === "sales-summary" || report.id === "purchase-summary") && (!dateRange || !dateRange.from || !dateRange.to))}
                 >
                   View Report
                 </Button>
@@ -367,3 +500,15 @@ export default function ReportsPage() {
   );
 }
 
+// Helper for chart configuration - could be moved to a separate file if complex
+// For now, keeping it here for simplicity of response.
+function useChart() {
+  return {
+    config: {
+      purchased: { label: "Purchased Qty", color: "hsl(var(--chart-1))" },
+      sold: { label: "Sold Qty", color: "hsl(var(--chart-2))" },
+    }
+  }
+}
+
+    
