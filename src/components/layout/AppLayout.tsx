@@ -1,7 +1,8 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import React, { useEffect, useState } from 'react'; // Added useState
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -17,16 +18,46 @@ import { Header } from '@/components/layout/Header';
 import { SidebarNavItems } from '@/components/layout/SidebarNavItems';
 import AppLogo from './AppLogo';
 import Link from 'next/link';
+import useLocalStorage from '@/hooks/useLocalStorage'; // Added
+import { useToast } from '@/hooks/use-toast'; // Added
+import type { Part } from '@/lib/types'; // Added
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast(); // Added
+
+  const [companyName] = useLocalStorage<string>('autocentral-settings-companyName', 'AutoCentral'); // Added
+  const [lowStockAlertsEnabled] = useLocalStorage<boolean>('autocentral-settings-lowStockAlerts', true); // Added
+  const [inventoryParts] = useLocalStorage<Part[]>('autocentral-inventory-parts', []); // Added
+  const [lowStockNotificationShownThisSession, setLowStockNotificationShownThisSession] = useState(false); // Added
+
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/login');
     }
   }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if (!isLoading && user && lowStockAlertsEnabled && !lowStockNotificationShownThisSession) {
+      const lowStockItems = inventoryParts.filter(part => part.quantity <= 1);
+      if (lowStockItems.length > 0) {
+        toast({
+          title: "Low Stock Alert",
+          description: `${lowStockItems.length} item(s) are currently low on stock. Please check your inventory or dashboard.`,
+          duration: 5000, 
+        });
+        setLowStockNotificationShownThisSession(true);
+      }
+    }
+    // Reset notification flag if user logs out (isLoading becomes true, then user becomes null)
+    if (isLoading && !user) {
+        setLowStockNotificationShownThisSession(false);
+    }
+
+  }, [user, isLoading, lowStockAlertsEnabled, inventoryParts, toast, lowStockNotificationShownThisSession, setLowStockNotificationShownThisSession]);
+
 
   if (isLoading || !user) {
     return (
@@ -47,7 +78,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
            <Link href="/dashboard" className="flex items-center gap-2">
             <AppLogo className="h-8 w-8 text-primary" />
             <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
-              AutoCentral
+              {companyName || 'AutoCentral'}
             </span>
           </Link>
         </SidebarHeader>
@@ -55,7 +86,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarNavItems />
         </SidebarContent>
         <SidebarFooter className="p-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
-          © {new Date().getFullYear()} AutoCentral Inc.
+          © {new Date().getFullYear()} {companyName || 'AutoCentral Inc.'}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col">

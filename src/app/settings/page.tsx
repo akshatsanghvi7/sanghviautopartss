@@ -1,13 +1,32 @@
+
+"use client";
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Palette, ShieldCheck } from 'lucide-react';
+import { Bell, Palette, ShieldCheck, Building } from 'lucide-react';
+import useLocalStorage from '@/hooks/useLocalStorage';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SettingsPage() {
+  const [companyName, setCompanyName] = useLocalStorage<string>('autocentral-settings-companyName', 'AutoCentral Inc.');
+  const [companyAddress, setCompanyAddress] = useLocalStorage<string>('autocentral-settings-companyAddress', '123 Auto Drive, Carville, ST 12345');
+  const [lowStockAlertsEnabled, setLowStockAlertsEnabled] = useLocalStorage<boolean>('autocentral-settings-lowStockAlerts', true);
+  
+  const { toast } = useToast();
+
+  const handleSaveChanges = () => {
+    // Values are saved automatically by useLocalStorage on change.
+    // This button can just provide user feedback.
+    toast({
+      title: "Settings Saved",
+      description: "Your general settings have been updated.",
+    });
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-col gap-6">
@@ -23,27 +42,22 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="companyName">Company Name</Label>
-                <Input id="companyName" defaultValue="AutoCentral Inc." />
+                <Input 
+                  id="companyName" 
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="companyAddress">Company Address</Label>
-                <Input id="companyAddress" defaultValue="123 Auto Drive, Carville, ST 12345" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="defaultCurrency">Default Currency</Label>
-                <Input id="defaultCurrency" defaultValue="USD" />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="darkMode" className="text-base">Dark Mode</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Toggle dark mode for the application. (Theme switching not implemented yet)
-                  </p>
-                </div>
-                <Switch id="darkMode" aria-label="Toggle dark mode" disabled />
+                <Input 
+                  id="companyAddress" 
+                  value={companyAddress}
+                  onChange={(e) => setCompanyAddress(e.target.value)} 
+                />
               </div>
               <div className="flex justify-end">
-                <Button>Save General Settings</Button>
+                <Button onClick={handleSaveChanges}>Save General Settings</Button>
               </div>
             </CardContent>
           </Card>
@@ -59,14 +73,18 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="emailNotifications">Email Notifications</Label>
-                  <Switch id="emailNotifications" defaultChecked />
+                  <Label htmlFor="emailNotifications" className="cursor-not-allowed opacity-50">Email Notifications</Label>
+                  <Switch id="emailNotifications" disabled />
                 </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="lowStockAlerts">Low Stock Alerts</Label>
-                  <Switch id="lowStockAlerts" defaultChecked />
+                  <Switch 
+                    id="lowStockAlerts" 
+                    checked={lowStockAlertsEnabled}
+                    onCheckedChange={setLowStockAlertsEnabled}
+                  />
                 </div>
-                <Button variant="outline" className="w-full">Manage Notification Preferences</Button>
+                <Button variant="outline" className="w-full" disabled>Manage Notification Preferences</Button>
               </CardContent>
             </Card>
 
@@ -92,7 +110,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">Manage security settings for your account.</p>
-                     <Button variant="outline" className="w-full">Two-Factor Authentication (Coming Soon)</Button>
+                     <Button variant="outline" className="w-full" disabled>Two-Factor Authentication (Coming Soon)</Button>
                 </CardContent>
             </Card>
           </div>
