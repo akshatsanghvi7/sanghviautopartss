@@ -7,20 +7,33 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Palette, ShieldCheck, Building } from 'lucide-react';
+import { Bell, Palette, ShieldCheck } from 'lucide-react';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
-  const [companyName, setCompanyName] = useLocalStorage<string>('autocentral-settings-companyName', 'AutoCentral Inc.');
-  const [companyAddress, setCompanyAddress] = useLocalStorage<string>('autocentral-settings-companyAddress', '123 Auto Drive, Carville, ST 12345');
+  const [storedCompanyName, setStoredCompanyName] = useLocalStorage<string>('autocentral-settings-companyName', 'AutoCentral Inc.');
+  const [storedCompanyAddress, setStoredCompanyAddress] = useLocalStorage<string>('autocentral-settings-companyAddress', '123 Auto Drive, Carville, ST 12345');
   const [lowStockAlertsEnabled, setLowStockAlertsEnabled] = useLocalStorage<boolean>('autocentral-settings-lowStockAlerts', true);
   
+  const [localCompanyName, setLocalCompanyName] = useState(storedCompanyName);
+  const [localCompanyAddress, setLocalCompanyAddress] = useState(storedCompanyAddress);
+
   const { toast } = useToast();
 
+  useEffect(() => {
+    setLocalCompanyName(storedCompanyName);
+  }, [storedCompanyName]);
+
+  useEffect(() => {
+    setLocalCompanyAddress(storedCompanyAddress);
+  }, [storedCompanyAddress]);
+
   const handleSaveChanges = () => {
-    // Values are saved automatically by useLocalStorage on change.
-    // This button can just provide user feedback.
+    setStoredCompanyName(localCompanyName);
+    setStoredCompanyAddress(localCompanyAddress);
+    // lowStockAlertsEnabled is already saved by its onCheckedChange
     toast({
       title: "Settings Saved",
       description: "Your general settings have been updated.",
@@ -44,16 +57,16 @@ export default function SettingsPage() {
                 <Label htmlFor="companyName">Company Name</Label>
                 <Input 
                   id="companyName" 
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)} 
+                  value={localCompanyName}
+                  onChange={(e) => setLocalCompanyName(e.target.value)} 
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="companyAddress">Company Address</Label>
                 <Input 
                   id="companyAddress" 
-                  value={companyAddress}
-                  onChange={(e) => setCompanyAddress(e.target.value)} 
+                  value={localCompanyAddress}
+                  onChange={(e) => setLocalCompanyAddress(e.target.value)} 
                 />
               </div>
               <div className="flex justify-end">
@@ -81,7 +94,7 @@ export default function SettingsPage() {
                   <Switch 
                     id="lowStockAlerts" 
                     checked={lowStockAlertsEnabled}
-                    onCheckedChange={setLowStockAlertsEnabled}
+                    onCheckedChange={setLowStockAlertsEnabled} // This saves immediately, which is fine for a switch
                   />
                 </div>
                 <Button variant="outline" className="w-full" disabled>Manage Notification Preferences</Button>
