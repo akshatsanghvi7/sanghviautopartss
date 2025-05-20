@@ -15,13 +15,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import type { Sale, Part, SaleItem, Customer } from '@/lib/types';
 import { SaleFormDialog, type SaleFormData } from '@/components/sales/SaleFormDialog';
 import { InvoiceViewDialog } from '@/components/sales/InvoiceViewDialog';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 // Initial mock sales data if localStorage is empty
 const initialMockSales: Sale[] = [
@@ -43,16 +45,16 @@ export default function SalesPage() {
   const [selectedSaleForInvoice, setSelectedSaleForInvoice] = useState<Sale | null>(null);
 
   const [statusFilters, setStatusFilters] = useState({
-    paid: true, 
-    pending: false, 
-    overdue: false, 
+    paid: true, // Represents 'cash' or 'credit' where credit is assumed paid for filtering
+    pending: false, // Not directly used yet, but placeholder for future use
+    overdue: false, // Not directly used yet
   });
 
 
   const handleNewSaleSubmit = (data: SaleFormData) => {
     const newSale: Sale = {
       id: `S${Date.now().toString().slice(-4)}${Math.random().toString(36).substr(2, 2).toUpperCase()}`, 
-      date: data.saleDate!.toISOString(), // saleDate is now guaranteed by form validation
+      date: data.saleDate!.toISOString(), 
       buyerName: data.buyerName,
       gstNumber: data.gstNumber,
       contactDetails: data.contactDetails,
@@ -73,30 +75,52 @@ export default function SalesPage() {
     const updatedInventory = inventoryParts.map(part => {
       const soldItem = newSale.items.find(item => item.partNumber === part.partNumber);
       if (soldItem) {
-        return { ...part, quantity: part.quantity - soldItem.quantitySold };
+        return { ...part, quantity: Math.max(0, part.quantity - soldItem.quantitySold) };
       }
       return part;
     });
     setInventoryParts(updatedInventory);
 
-    setSales(prevSales => [newSale, ...prevSales]);
+    setSales(prevSales => [newSale, ...prevSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     
-    const existingCustomer = customers.find(c => c.name.toLowerCase() === newSale.buyerName.toLowerCase());
-    if (!existingCustomer) {
-      const newCustomer: Customer = {
-        id: `CUST${Date.now().toString().slice(-5)}`,
-        name: newSale.buyerName,
-        email: newSale.emailAddress,
-        phone: newSale.contactDetails,
-        balance: 0, 
-      };
-      setCustomers(prevCustomers => [newCustomer, ...prevCustomers]);
-      toast({
-        title: "New Customer Added",
-        description: `${newCustomer.name} has been added to the customer list.`,
-      });
-    }
+    // Update or add customer and their balance
+    setCustomers(prevCustomers => {
+      const existingCustomerIndex = prevCustomers.findIndex(c => c.name.toLowerCase() === newSale.buyerName.toLowerCase());
+      let updatedCustomers = [...prevCustomers];
 
+      if (existingCustomerIndex !== -1) {
+        const existingCustomer = updatedCustomers[existingCustomerIndex];
+        let newBalance = existingCustomer.balance;
+        if (newSale.paymentType === 'credit') {
+          newBalance += newSale.netAmount;
+        }
+        // Update existing customer's details if provided and different
+        updatedCustomers[existingCustomerIndex] = {
+          ...existingCustomer,
+          email: newSale.emailAddress || existingCustomer.email,
+          phone: newSale.contactDetails || existingCustomer.phone,
+          balance: newBalance,
+        };
+        toast({
+          title: "Customer Balance Updated",
+          description: `${existingCustomer.name}'s amount due is now ₹${newBalance.toFixed(2)}.`,
+        });
+      } else {
+        const newCustomer: Customer = {
+          id: `CUST${Date.now().toString().slice(-5)}`,
+          name: newSale.buyerName,
+          email: newSale.emailAddress,
+          phone: newSale.contactDetails,
+          balance: newSale.paymentType === 'credit' ? newSale.netAmount : 0,
+        };
+        updatedCustomers = [newCustomer, ...updatedCustomers];
+        toast({
+          title: "New Customer Added",
+          description: `${newCustomer.name} added. Amount due: ₹${newCustomer.balance.toFixed(2)}.`,
+        });
+      }
+      return updatedCustomers;
+    });
 
     toast({
       title: "Sale Recorded",
@@ -104,6 +128,46 @@ export default function SalesPage() {
     });
     setIsSaleFormOpen(false);
   };
+
+  const handleSalePaymentTypeChange = (saleId: string, newPaymentType: 'cash' | 'credit') => {
+    let saleBuyerName: string | undefined;
+    let saleAmount = 0;
+    let oldPaymentType: 'cash' | 'credit' | undefined;
+
+    setSales(prevSales => 
+      prevSales.map(s => {
+        if (s.id === saleId) {
+          saleBuyerName = s.buyerName;
+          saleAmount = s.netAmount;
+          oldPaymentType = s.paymentType;
+          return { ...s, paymentType: newPaymentType };
+        }
+        return s;
+      })
+    );
+
+    if (saleBuyerName && oldPaymentType && oldPaymentType !== newPaymentType) {
+      setCustomers(prevCustomers => 
+        prevCustomers.map(c => {
+          if (c.name.toLowerCase() === saleBuyerName!.toLowerCase()) {
+            let newBalance = c.balance;
+            if (newPaymentType === 'cash' && oldPaymentType === 'credit') { // Was credit, now cash
+              newBalance -= saleAmount;
+            } else if (newPaymentType === 'credit' && oldPaymentType === 'cash') { // Was cash, now credit
+              newBalance += saleAmount;
+            }
+            toast({
+              title: "Payment Type Updated",
+              description: `Sale ${saleId} for ${c.name} is now ${newPaymentType}. ${c.name}'s amount due is ₹${newBalance.toFixed(2)}.`,
+            });
+            return { ...c, balance: Math.max(0, newBalance) }; // Ensure balance doesn't go negative
+          }
+          return c;
+        })
+      );
+    }
+  };
+
 
   const handleViewBillClick = (sale: Sale) => {
     setSelectedSaleForInvoice(sale);
@@ -113,11 +177,23 @@ export default function SalesPage() {
   const filteredSales = sales.filter(sale =>
     (sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sale.buyerName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    // Adjust filter logic if needed, for now, 'paid' shows all for simplicity of this filter example
     ( (statusFilters.paid && (sale.paymentType === 'cash' || sale.paymentType === 'credit')) ) 
-  );
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleStatusFilterChange = (statusKey: keyof typeof statusFilters, checked: boolean) => {
     setStatusFilters(prev => ({ ...prev, [statusKey]: checked }));
+  };
+
+  const getPaymentTypeStyle = (paymentType: 'cash' | 'credit') => {
+    switch (paymentType) {
+      case 'cash':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-800';
+      case 'credit':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700 hover:bg-blue-200 dark:hover:bg-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600';
+    }
   };
 
 
@@ -127,7 +203,7 @@ export default function SalesPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Sales Management</h1>
-            <p className="text-muted-foreground">Track and manage your sales transactions.</p>
+            <p className="text-muted-foreground">Track and manage your sales transactions. Customer 'Amount Due' updates based on 'Credit' sales.</p>
           </div>
           <Button onClick={() => setIsSaleFormOpen(true)}>
             <PlusCircle className="mr-2 h-4 w-4" /> New Sale
@@ -137,7 +213,7 @@ export default function SalesPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Sales History</CardTitle>
-            <CardDescription>Review all recorded sales transactions.</CardDescription>
+            <CardDescription>Review all recorded sales transactions. You can change payment type for each sale.</CardDescription>
             <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
               <div className="relative flex-grow w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -152,7 +228,7 @@ export default function SalesPage() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full sm:w-auto">
                     <Filter className="mr-2 h-4 w-4" />
-                    Filter Status
+                    Filter Status (Placeholder)
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -190,7 +266,7 @@ export default function SalesPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className="text-right">Net Amount</TableHead>
-                  <TableHead>Payment</TableHead>
+                  <TableHead>Payment Type</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -202,16 +278,21 @@ export default function SalesPage() {
                     <TableCell>{sale.buyerName}</TableCell>
                     <TableCell className="text-right">₹{sale.netAmount.toFixed(2)}</TableCell>
                     <TableCell>
-                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        sale.paymentType === 'cash' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        sale.paymentType === 'credit' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' 
-                      }`}>
-                        {sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}
-                      </span>
+                      <Select
+                        value={sale.paymentType}
+                        onValueChange={(newPaymentType: 'cash' | 'credit') => handleSalePaymentTypeChange(sale.id, newPaymentType)}
+                      >
+                        <SelectTrigger className={cn("h-8 text-xs w-auto min-w-[100px] border", getPaymentTypeStyle(sale.paymentType))}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash" className="text-xs">Cash</SelectItem>
+                          <SelectItem value="credit" className="text-xs">Credit</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewBillClick(sale)}>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewBillClick(sale)} title="View Bill">
                         <FileText className="h-4 w-4" />
                          <span className="sr-only">View Bill</span>
                       </Button>

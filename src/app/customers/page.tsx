@@ -5,52 +5,75 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Search, Edit2, Trash2, Mail, Phone } from 'lucide-react';
+import { PlusCircle, Search, Edit2, Trash2, Mail, Phone, History } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Customer } from '@/lib/types';
+import type { Customer, Sale } from '@/lib/types';
 import React, { useState, useMemo } from 'react'; 
 import { useToast } from "@/hooks/use-toast";
+import { CustomerSalesHistoryDialog } from '@/components/customers/CustomerSalesHistoryDialog';
 
 // Initial mock data if localStorage is empty
 const initialMockCustomers: Customer[] = [
   { id: 'C001', name: 'John Doe', email: 'john.doe@example.com', phone: '555-1234', balance: 0 },
-  { id: 'C002', name: 'Jane Smith', email: 'jane.smith@example.com', phone: '555-5678', balance: 120.50 },
+  { id: 'C002', name: 'Jane Smith', email: 'jane.smith@example.com', phone: '555-5678', balance: 0 },
   { id: 'C003', name: 'Bob Johnson', email: 'bob.j@example.com', phone: '555-8765', balance: 0 },
-  { id: 'C004', name: 'Alice Brown', email: 'alice.b@example.com', phone: '555-4321', balance: 45.20 },
+  { id: 'C004', name: 'Alice Brown', email: 'alice.b@example.com', phone: '555-4321', balance: 0 },
 ];
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useLocalStorage<Customer[]>('autocentral-customers', initialMockCustomers);
+  const [sales, setSales] = useLocalStorage<Sale[]>('autocentral-sales', []);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
-  const processedCustomers = useMemo(() => {
-    return customers.map(c => {
-      let numericBalance = 0;
-      if (typeof c.balance === 'number') {
-        numericBalance = c.balance;
-      } else if (typeof c.balance === 'string') {
-        const parsed = parseFloat(String(c.balance).replace(/[^0-9.-]+/g,""));
-        numericBalance = isNaN(parsed) ? 0 : parsed;
-      } else if (c.balance === undefined || c.balance === null) {
-        numericBalance = 0;
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
+
+  const processedCustomersWithBalance = useMemo(() => {
+    // De-duplicate customers by name (case-insensitive) as a first step
+    const uniqueCustomersByName: Record<string, Customer> = {};
+    customers.forEach(customer => {
+      const normalizedName = customer.name.toLowerCase();
+      if (!uniqueCustomersByName[normalizedName]) {
+        uniqueCustomersByName[normalizedName] = { ...customer, balance: 0 }; // Initialize balance
+      } else {
+        // If duplicate names exist but different IDs, merge details if one is more complete
+        // For simplicity here, we'll just keep the first one encountered with this name
+        // A more robust system might have better ID management or merging strategy
+        if (!uniqueCustomersByName[normalizedName].email && customer.email) {
+            uniqueCustomersByName[normalizedName].email = customer.email;
+        }
+        if (!uniqueCustomersByName[normalizedName].phone && customer.phone) {
+            uniqueCustomersByName[normalizedName].phone = customer.phone;
+        }
       }
-      return { ...c, balance: numericBalance };
     });
-  }, [customers]);
+    
+    const customersArray = Object.values(uniqueCustomersByName);
+
+    return customersArray.map(customer => {
+      const amountDue = sales.reduce((acc, sale) => {
+        if (sale.buyerName.toLowerCase() === customer.name.toLowerCase() && sale.paymentType === 'credit') {
+          return acc + sale.netAmount;
+        }
+        return acc;
+      }, 0);
+      return { ...customer, balance: amountDue };
+    });
+  }, [customers, sales]);
 
   const filteredCustomers = useMemo(() => {
-    return processedCustomers.filter(customer =>
+    return processedCustomersWithBalance.filter(customer =>
         customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (customer.phone && customer.phone.toLowerCase().includes(searchTerm.toLowerCase()))
     );
-  }, [processedCustomers, searchTerm]);
+  }, [processedCustomersWithBalance, searchTerm]);
 
 
   const handleAddCustomer = () => {
-    toast({ title: "Feature Coming Soon", description: "Ability to manually add customers will be implemented. Customers are currently added automatically from Sales if they don't exist." });
+    toast({ title: "Feature Coming Soon", description: "Ability to manually add customers will be implemented. Customers are currently added/updated automatically from Sales." });
   };
 
   const handleEditCustomer = (customerId: string) => {
@@ -61,6 +84,10 @@ export default function CustomersPage() {
     toast({ title: "Feature Coming Soon", description: `Deleting customer ${customerId} will be implemented with confirmation.` });
   };
 
+  const handleViewHistory = (customer: Customer) => {
+    setSelectedCustomerForHistory(customer);
+    setIsHistoryDialogOpen(true);
+  };
 
   return (
     <AppLayout>
@@ -68,7 +95,7 @@ export default function CustomersPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Customer Management</h1>
-            <p className="text-muted-foreground">Manage your customer database. Balances are not automatically updated from sales in this version.</p>
+            <p className="text-muted-foreground">Manage your customer database. "Amount Due" is calculated from 'Credit' sales. Customers are added/updated automatically via Sales.</p>
           </div>
           <Button onClick={handleAddCustomer}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add Customer
@@ -78,7 +105,7 @@ export default function CustomersPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Customer List</CardTitle>
-            <CardDescription>Browse, search, and manage your customers. New customers are automatically added from sales.</CardDescription>
+            <CardDescription>Browse, search, and manage your customers. New customers are automatically added from sales, and their 'Amount Due' is updated based on credit sales.</CardDescription>
              <div className="mt-4 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
@@ -97,7 +124,7 @@ export default function CustomersPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead className="text-right">Amount Due</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -112,13 +139,17 @@ export default function CustomersPage() {
                     <TableCell>
                       {customer.phone ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground"/>{customer.phone}</div> : '-'}
                     </TableCell>
-                    <TableCell className="text-right">₹{(typeof customer.balance === 'number' ? customer.balance : 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">₹{customer.balance.toFixed(2)}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)}>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(customer)} title="View Sales History">
+                        <History className="h-4 w-4" />
+                        <span className="sr-only">View Sales History</span>
+                      </Button>
+                      <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)} title="Edit Customer">
                         <Edit2 className="h-4 w-4" />
                         <span className="sr-only">Edit</span>
                       </Button>
-                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomer(customer.id)}>
+                      <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomer(customer.id)} title="Delete Customer">
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete</span>
                       </Button>
@@ -129,12 +160,20 @@ export default function CustomersPage() {
             </Table>
             {filteredCustomers.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    {customers.length > 0 && searchTerm ? 'No customers match your search.' : 'No customers found. Customers are added automatically when a sale is recorded.'}
+                    {processedCustomersWithBalance.length > 0 && searchTerm ? 'No customers match your search.' : 'No customers found. Customers are added automatically when a sale is recorded.'}
                 </div>
             )}
           </CardContent>
         </Card>
       </div>
+      {selectedCustomerForHistory && (
+        <CustomerSalesHistoryDialog
+          isOpen={isHistoryDialogOpen}
+          onOpenChange={setIsHistoryDialogOpen}
+          customer={selectedCustomerForHistory}
+          allSales={sales}
+        />
+      )}
     </AppLayout>
   );
 }
