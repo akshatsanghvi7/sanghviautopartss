@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,7 @@ interface PurchasesClientPageProps {
   initialPurchases: Purchase[];
   initialInventoryParts: Part[];
   initialSuppliers: Supplier[];
-  companySettings: AppSettings; // Add companySettings prop
+  companySettings: AppSettings; 
 }
 
 export function PurchasesClientPage({ initialPurchases, initialInventoryParts, initialSuppliers, companySettings }: PurchasesClientPageProps) {
@@ -44,29 +45,12 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
   useEffect(() => { setInventoryParts(initialInventoryParts); }, [initialInventoryParts]);
   useEffect(() => { setSuppliers(initialSuppliers); }, [initialSuppliers]);
 
-  const handleNewPurchaseSubmit = async (data: PurchaseFormData) => {
-    const newPurchaseData: Purchase = {
-      id: `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`,
-      date: data.purchaseDate!.toISOString(), 
-      supplierId: data.supplierId, 
-      supplierName: data.supplierName,
-      supplierInvoiceNumber: data.supplierInvoiceNumber,
-      items: data.items.map(item => ({
-        partNumber: item.partNumber, partName: item.partName, quantityPurchased: item.quantity,
-        unitCost: item.unitCost, itemTotal: item.quantity * item.unitCost,
-      })),
-      subTotal: data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0),
-      shippingCosts: data.shippingCosts || 0,
-      otherCharges: data.otherCharges || 0,
-      netAmount: data.items.reduce((acc, item) => acc + item.quantity * item.unitCost, 0) + (data.shippingCosts || 0) + (data.otherCharges || 0),
-      paymentType: data.paymentType,
-      status: data.status,
-      notes: data.notes,
-      paymentSettled: data.paymentType !== 'on_credit',
-    };
-
+  const handleNewPurchaseSubmit = async (formDataFromDialog: Omit<Purchase, 'id' | 'paymentSettled'>) => {
     startTransition(async () => {
-      const result = await addPurchase(newPurchaseData);
+      // formDataFromDialog already has 'date' as an ISO string from PurchaseFormDialog
+      // and other fields correctly mapped.
+      // The server action addPurchase expects this type.
+      const result = await addPurchase(formDataFromDialog);
       if (result.success) {
         toast({ title: "Purchase Order Recorded", description: result.message });
         setIsPurchaseFormOpen(false);
@@ -200,3 +184,5 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
     </div>
   );
 }
+
+    
