@@ -50,7 +50,7 @@
     "otherName": "TATA 697 BS 3",
     "partNumber": "FS19644 V",
     "company": "Fleetguard",
-    "quantity": 2,
+    "quantity": 1,
     "category": "Filter",
     "mrp": "₹1768.00",
     "shelf": "R-1"
@@ -456,7 +456,7 @@
     "otherName": "ASHOK LEYLAND 25|6/35|6 & CARGO 1614",
     "partNumber": "TX 47890/20",
     "company": "Texspin",
-    "quantity": 2,
+    "quantity": 1,
     "category": "Bearing",
     "mrp": "₹1735.00",
     "shelf": "L-2"
@@ -1985,7 +1985,7 @@
     "otherName": "13",
     "partNumber": "13",
     "company": "STL",
-    "quantity": 5,
+    "quantity": 4,
     "category": "Nut",
     "mrp": "₹2.00",
     "shelf": "R-5"
@@ -2728,7 +2728,7 @@
     "partName": "Front Oil seal",
     "partNumber": "MG 2550",
     "company": "Marshal",
-    "quantity": 10,
+    "quantity": 9,
     "category": "Oil seal",
     "mrp": "₹27.00",
     "shelf": "R-3"
@@ -2841,7 +2841,7 @@
     "otherName": "SPL90 UJ KIT",
     "partNumber": "SDUJ0090L126",
     "company": "Spicer",
-    "quantity": 2,
+    "quantity": 0,
     "category": "Cross Kit",
     "mrp": "₹1815.00",
     "shelf": "R-3"

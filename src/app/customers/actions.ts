@@ -18,42 +18,14 @@ export async function getCustomersWithCalculatedBalances(): Promise<Customer[]> 
   customers.forEach(c => {
     customerMap.set(c.name.toLowerCase(), { ...c, balance: Number(c.balance) || 0 });
   });
+  
+  // Recalculate balances based on credit sales for existing customers
+  // This ensures that if a customer was added manually or via a non-credit sale first, their balance starts at 0
+  // before credit sales are applied.
+  const customersWithInitialBalance = customers.map(c => ({...c, balance: 0}));
 
-  // Recalculate balances based on credit sales
-  sales.forEach(sale => {
-    if (sale.paymentType === 'credit') {
-      const customerNameLower = sale.buyerName.toLowerCase();
-      const existingCustomer = customerMap.get(customerNameLower);
-      if (existingCustomer) {
-        existingCustomer.balance += sale.netAmount;
-      } else {
-        // This case should ideally not happen if customers are added upon sale creation
-        // But if it does, create a temporary entry for balance calculation
-        customerMap.set(customerNameLower, { 
-            id: `TEMP-${Date.now()}`, // Temporary ID
-            name: sale.buyerName, 
-            balance: sale.netAmount,
-            email: sale.emailAddress,
-            phone: sale.contactDetails
-        });
-      }
-    }
-  });
-  
-  // Ensure all customers from file are present, even if they had no credit sales affecting balance calculation
-  // The balance from file is used as base, then credit sales add to it.
-  // If a customer from file isn't in sales, their file balance (or 0 if not numeric) is kept.
-  // The previous logic for adding to map already handles this as it starts with customers from file.
-  // The critical part is that `customers` from `readData` should be the source of truth for who is a customer,
-  // and `sales` data only *adjusts* their balance.
-  
-  // Let's refine the balance calculation:
-  // 1. Start with all customers, balances reset to 0.
-  // 2. Add amounts from 'credit' sales.
-  
-  const finalCustomers: Customer[] = customers.map(c => ({ ...c, balance: 0 })); // Reset balances
 
-  finalCustomers.forEach(customer => {
+  customersWithInitialBalance.forEach(customer => {
     sales.forEach(sale => {
       if (sale.buyerName.toLowerCase() === customer.name.toLowerCase() && sale.paymentType === 'credit') {
         customer.balance += sale.netAmount;
@@ -61,8 +33,25 @@ export async function getCustomersWithCalculatedBalances(): Promise<Customer[]> 
     });
   });
 
-  return finalCustomers;
+  return customersWithInitialBalance;
 }
 
-// Placeholder for future actions like manual add/edit/delete of customers
-// For now, customers are primarily managed via the Sales process.
+export async function deleteCustomerAction(customerId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    let customers = await readData<Customer[]>(CUSTOMERS_FILE, []);
+    const initialLength = customers.length;
+    customers = customers.filter(customer => customer.id !== customerId);
+
+    if (customers.length === initialLength) {
+      return { success: false, message: 'Customer not found.' };
+    }
+
+    await writeData(CUSTOMERS_FILE, customers);
+    revalidatePath('/customers');
+    revalidatePath('/dashboard'); // Customer count might change
+    return { success: true, message: 'Customer deleted successfully.' };
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    return { success: false, message: 'Failed to delete customer.' };
+  }
+}

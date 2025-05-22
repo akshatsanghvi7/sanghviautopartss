@@ -7,9 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlusCircle, Search, Edit2, Trash2, Mail, Phone, History } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Customer, Sale } from '@/lib/types';
-import React, { useState, useMemo, useEffect } from 'react'; 
+import React, { useState, useMemo, useEffect, startTransition } from 'react'; 
 import { useToast } from "@/hooks/use-toast";
 import { CustomerSalesHistoryDialog } from '@/components/customers/CustomerSalesHistoryDialog';
+import { DeleteCustomerDialog } from '@/components/customers/DeleteCustomerDialog'; // Added
+import { deleteCustomerAction } from './actions'; // Added
 
 interface CustomersClientPageProps {
   initialCustomers: Customer[];
@@ -24,25 +26,23 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
 
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); // Added
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null); // Added
+
   useEffect(() => {
     setCustomers(initialCustomers);
   }, [initialCustomers]);
 
-  // Deduplication and balance calculation is now primarily handled server-side by getCustomersWithCalculatedBalances
-  // The client page receives the processed list.
   const processedCustomersWithBalance = useMemo(() => {
-    // Client-side de-duplication for display, if any minor discrepancies persist or for pure client interactions before revalidation
     const uniqueCustomersByName: Record<string, Customer> = {};
     customers.forEach(customer => {
       const normalizedName = customer.name.toLowerCase();
       if (!uniqueCustomersByName[normalizedName]) {
         uniqueCustomersByName[normalizedName] = { ...customer, balance: Number(customer.balance) || 0 };
       } else {
-        // Basic merging strategy if somehow duplicates make it to client with different IDs
         if (!uniqueCustomersByName[normalizedName].email && customer.email) uniqueCustomersByName[normalizedName].email = customer.email;
         if (!uniqueCustomersByName[normalizedName].phone && customer.phone) uniqueCustomersByName[normalizedName].phone = customer.phone;
-        // Balance should be authoritative from server action, but sum if merging client-side (less ideal)
-        uniqueCustomersByName[normalizedName].balance += (Number(customer.balance) || 0);
+        // Balance from server action is authoritative for the initial list.
       }
     });
     return Object.values(uniqueCustomersByName);
@@ -59,7 +59,26 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
 
   const handleAddCustomer = () => toast({ title: "Info", description: "Customers are automatically added/updated via the Sales page." });
   const handleEditCustomer = (customerId: string) => toast({ title: "Feature Coming Soon", description: `Editing customer ${customerId} will be implemented.` });
-  const handleDeleteCustomer = (customerId: string) => toast({ title: "Feature Coming Soon", description: `Deleting customer ${customerId} will be implemented.` });
+  
+  const handleDeleteCustomer = (customer: Customer) => { // Changed to accept customer object
+    setCustomerToDelete(customer);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    startTransition(async () => {
+      const result = await deleteCustomerAction(customerToDelete.id);
+      if (result.success) {
+        toast({ title: "Customer Deleted", description: `${customerToDelete.name} has been deleted.` });
+        // No need to manually filter client state, revalidation will refresh
+      } else {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+      }
+      setIsDeleteConfirmOpen(false);
+      setCustomerToDelete(null);
+    });
+  };
 
   const handleViewHistory = (customer: Customer) => {
     setSelectedCustomerForHistory(customer);
@@ -97,7 +116,7 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(customer)} title="View Sales History"><History className="h-4 w-4" /><span className="sr-only">View Sales History</span></Button>
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)} title="Edit Customer"><Edit2 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomer(customer.id)} title="Delete Customer"><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button>
+                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomer(customer)} title="Delete Customer"><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -107,6 +126,14 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
         </CardContent>
       </Card>
       {selectedCustomerForHistory && (<CustomerSalesHistoryDialog isOpen={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen} customer={selectedCustomerForHistory} allSales={allSalesForHistory} />)}
+      {customerToDelete && (
+        <DeleteCustomerDialog
+          isOpen={isDeleteConfirmOpen}
+          onOpenChange={setIsDeleteConfirmOpen}
+          onConfirm={confirmDeleteCustomer}
+          customerName={customerToDelete.name}
+        />
+      )}
     </div>
   );
 }
