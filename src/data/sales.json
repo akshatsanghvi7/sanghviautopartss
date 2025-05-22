@@ -18,7 +18,8 @@
     "subTotal": 2,
     "discount": 0,
     "netAmount": 2,
-    "paymentType": "cash"
+    "paymentType": "cash",
+    "status": "Cancelled"
   },
   {
     "id": "S3362T3",
