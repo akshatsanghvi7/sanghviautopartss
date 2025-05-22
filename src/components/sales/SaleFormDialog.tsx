@@ -97,14 +97,10 @@ export function SaleFormDialog({
 
   useEffect(() => {
     if (isOpen) {
-      // When dialog opens, if it's for a new sale (e.g., saleDate is not set),
-      // set it to the current date.
       if (!getValues('saleDate')) {
         setValue('saleDate', new Date());
       }
     } else {
-      // When dialog closes, reset the form.
-      // Set saleDate to undefined to ensure consistency for next open.
       reset({
         saleDate: undefined,
         items: [],
@@ -123,18 +119,14 @@ export function SaleFormDialog({
   }, [isOpen, reset, setValue, getValues]);
 
 
-  const handlePartSearch = (partNumber: string) => {
-    setCurrentPartNumberInput(partNumber);
-    const part = inventoryParts.find(p => p.partNumber.toLowerCase() === partNumber.toLowerCase());
-    setSelectedPartForAdding(part || null);
-    if (!part && partNumber) {
-        toast({ title: "Part not found", description: `No part with number ${partNumber} in inventory.`, variant: "destructive"});
-    }
+  const handlePartSelectionForSale = (part: Part) => {
+    setSelectedPartForAdding(part);
+    setPartSearchTerm(part.partName); // Update search term to selected part's name
   };
 
   const handleAddItem = () => {
     if (!selectedPartForAdding) {
-      toast({ title: "No Part Selected", description: "Please enter a valid part number.", variant: "destructive" });
+      toast({ title: "No Part Selected", description: "Please search and select a valid part.", variant: "destructive" });
       return;
     }
     const quantity = Number(currentQuantityInput);
@@ -147,11 +139,11 @@ export function SaleFormDialog({
       return;
     }
 
-    const existingItemIndex = fields.findIndex(item => item.partNumber === selectedPartForAdding.partNumber);
+    const existingItemIndex = fields.findIndex(item => item.partNumber === selectedPartForAdding.partNumber && item.unitPrice === parseFloat(selectedPartForAdding.mrp.replace(/[^0-9.-]+/g,"")));
+    
     const unitPrice = parseFloat(selectedPartForAdding.mrp.replace(/[^0-9.-]+/g,"")) || 0;
 
     if (existingItemIndex > -1) {
-      // Update quantity of existing item
       const existingItem = fields[existingItemIndex];
       const newQuantity = existingItem.quantity + quantity;
       if (newQuantity > selectedPartForAdding.quantity) {
@@ -169,10 +161,10 @@ export function SaleFormDialog({
     }
 
     toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} added to sale.` });
-    setCurrentPartNumberInput('');
     setSelectedPartForAdding(null);
     setCurrentQuantityInput(1);
-    setPartSearchTerm(''); // Clear search term
+    setPartSearchTerm(''); 
+    document.getElementById('partSearchSale')?.focus();
   };
 
   const watchedItems = watch("items");
@@ -191,8 +183,10 @@ export function SaleFormDialog({
   const netAmount = subTotal - numericDiscount;
 
   const filteredInventoryParts = inventoryParts.filter(part =>
-    part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
-    part.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase())
+    partSearchTerm && (
+        part.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) ||
+        part.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase())
+    )
   ).slice(0, 5); 
 
   const handleFormSubmitInternal: SubmitHandler<SaleFormData> = (data) => {
@@ -215,7 +209,7 @@ export function SaleFormDialog({
           <DialogDescription>Fill in the details for the new sale transaction.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(handleFormSubmitInternal)} className="space-y-4">
-        <ScrollArea className="h-[60vh] pr-6">
+        <ScrollArea className="h-[60vh] pr-6 custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <Label htmlFor="buyerName">Buyer Name *</Label>
@@ -277,58 +271,70 @@ export function SaleFormDialog({
           {errors.items?.message && <p className="text-sm text-destructive">{errors.items.message}</p>}
 
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end border p-4 rounded-md">
-            <div className="md:col-span-2">
-              <Label htmlFor="partSearch">Search Part (Name/Number)</Label>
-              <div className="relative">
+          <div className="border p-4 rounded-md space-y-3">
+            <div>
+                <Label htmlFor="partSearchSale">Search Part (Name/Number)</Label>
                 <Input
-                    id="partSearch"
+                    id="partSearchSale"
                     value={partSearchTerm}
                     onChange={(e) => {
                         setPartSearchTerm(e.target.value);
                         if (!e.target.value) setSelectedPartForAdding(null);
                     }}
                     placeholder="Type to search..."
+                    autoComplete="off"
                 />
-                {partSearchTerm && filteredInventoryParts.length > 0 && (
-                    <div className="absolute z-10 w-full bg-background border mt-1 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                        {filteredInventoryParts.map(part => (
-                            <div
-                                key={part.partNumber}
-                                className="p-2 hover:bg-accent cursor-pointer"
-                                onClick={() => {
-                                    handlePartSearch(part.partNumber);
-                                    setPartSearchTerm(part.partName); 
-                                }}
-                            >
-                                {part.partName} ({part.partNumber}) - Stock: {part.quantity}
+            </div>
+            
+            <div>
+                {partSearchTerm && (
+                    filteredInventoryParts.length > 0 ? (
+                        <div className="bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
+                            {filteredInventoryParts.map(part => (
+                                <div
+                                    key={`${part.partNumber}-${part.mrp}`} // Ensure key is unique if MRP varies for same partNumber
+                                    className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                    onClick={() => handlePartSelectionForSale(part)}
+                                >
+                                    {part.partName} ({part.partNumber}) - MRP: {part.mrp} - Stock: {part.quantity}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        partSearchTerm.length > 0 && !selectedPartForAdding && (
+                            <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
+                                Part not found: "{partSearchTerm}". Ensure part exists in Inventory.
                             </div>
-                        ))}
-                    </div>
+                        )
+                    )
                 )}
-              </div>
-              {selectedPartForAdding && (
+            </div>
+
+            {selectedPartForAdding && (
                  <p className="text-sm text-muted-foreground mt-1">
-                    Selected: {selectedPartForAdding.partName} (Price: {selectedPartForAdding.mrp}, Stock: {selectedPartForAdding.quantity})
+                    Selected: {selectedPartForAdding.partName} (MRP: {selectedPartForAdding.mrp}, Stock: {selectedPartForAdding.quantity})
                  </p>
-              )}
-            </div>
-             <div>
-              <Label htmlFor="currentQuantityInput">Quantity *</Label>
-              <Input
-                id="currentQuantityInput"
-                type="number"
-                value={currentQuantityInput}
-                onChange={(e) => setCurrentQuantityInput(e.target.value ? Number(e.target.value) : '')}
-                min="1"
-              />
-            </div>
-            <div className="md:col-span-3">
-              <Button type="button" onClick={handleAddItem} className="w-full md:w-auto" disabled={!selectedPartForAdding}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Item to Sale
-              </Button>
+            )}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end pt-2">
+                <div className="sm:col-span-2 md:col-span-1">
+                    <Label htmlFor="currentQuantityInputSale">Quantity *</Label>
+                    <Input
+                        id="currentQuantityInputSale"
+                        type="number"
+                        value={currentQuantityInput}
+                        onChange={(e) => setCurrentQuantityInput(e.target.value ? Number(e.target.value) : '')}
+                        min="1"
+                    />
+                </div>
+                <div className="md:col-span-2">
+                    <Button type="button" onClick={handleAddItem} className="w-full sm:w-auto mt-4 sm:mt-0" disabled={!selectedPartForAdding}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add Item to Sale
+                    </Button>
+                </div>
             </div>
           </div>
+
 
           {fields.length > 0 && (
             <div className="mt-4">
@@ -388,3 +394,4 @@ export function SaleFormDialog({
     </Dialog>
   );
 }
+
