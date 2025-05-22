@@ -60,13 +60,12 @@ export async function addPurchase(newPurchaseDataFromForm: Omit<Purchase, 'id' |
           parts[partIndex].quantity += purchaseItem.quantityPurchased;
           inventoryModified = true;
         } else {
-          // Optionally handle new part creation if needed, or assume part must exist
            parts.push({
             partName: purchaseItem.partName,
             partNumber: purchaseItem.partNumber,
-            mrp: `₹${purchaseItem.unitCost.toFixed(2)}`, // Assume unit cost is MRP for new part
+            mrp: `₹${purchaseItem.unitCost.toFixed(2)}`, 
             quantity: purchaseItem.quantityPurchased,
-            category: 'Default', // Or get from form if available
+            category: 'Default', 
             otherName: '',
             company: '',
             shelf: ''
@@ -101,13 +100,13 @@ export async function addPurchase(newPurchaseDataFromForm: Omit<Purchase, 'id' |
         (newPurchaseDataFromForm.supplierEmail || "") !== (existingSupplier.email || "") ||
         (newPurchaseDataFromForm.supplierPhone || "") !== (existingSupplier.phone || "");
 
-      existingSupplier.name = formSupplierNameTrimmed || existingSupplier.name; // Use existing if new is empty
+      existingSupplier.name = formSupplierNameTrimmed || existingSupplier.name; 
       existingSupplier.contactPerson = newPurchaseDataFromForm.supplierContactPerson || existingSupplier.contactPerson;
       existingSupplier.email = newPurchaseDataFromForm.supplierEmail || existingSupplier.email;
       existingSupplier.phone = newPurchaseDataFromForm.supplierPhone || existingSupplier.phone;
       
       let currentBalance = Number(existingSupplier.balance) || 0;
-      if (newPurchase.paymentType === 'on_credit' && !newPurchase.paymentSettled) { // Only add to balance if it's on_credit and not settled
+      if (newPurchase.paymentType === 'on_credit' && !newPurchase.paymentSettled) { 
         currentBalance += newPurchase.netAmount;
       }
       existingSupplier.balance = currentBalance;
@@ -138,6 +137,7 @@ export async function addPurchase(newPurchaseDataFromForm: Omit<Purchase, 'id' |
     revalidatePath('/inventory');
     revalidatePath('/suppliers');
     revalidatePath('/dashboard');
+    revalidatePath('/reports'); // Added revalidatePath for reports
     return { success: true, message: `Purchase ${newPurchase.id} recorded. ${supplierMessage}${inventoryUpdatedMessage}` };
   } catch (error) {
     console.error('Error in addPurchase:', error);
@@ -161,21 +161,19 @@ export async function updatePurchaseStatus(purchaseId: string, newStatus: Purcha
       let parts = await getInventoryParts();
       let needsWrite = false;
       if (newStatus === 'Received' && oldStatus !== 'Received') {
-        // Increase stock
         purchaseToUpdate.items.forEach(item => {
           const partIdx = parts.findIndex(p => p.partNumber === item.partNumber && p.mrp === `₹${item.unitCost.toFixed(2)}`);
           if (partIdx !== -1) {
              parts[partIdx].quantity += item.quantityPurchased;
              needsWrite = true;
           } else {
-            // Part with this MRP might not exist, create it or log warning
             console.warn(`Part ${item.partNumber} with MRP ₹${item.unitCost.toFixed(2)} not found for stock increase. Creating new entry.`);
             parts.push({
               partName: item.partName,
               partNumber: item.partNumber,
               mrp: `₹${item.unitCost.toFixed(2)}`,
               quantity: item.quantityPurchased,
-              category: 'Default', // Consider how to get category
+              category: 'Default', 
               otherName: '',
               company: '',
               shelf: '',
@@ -185,7 +183,6 @@ export async function updatePurchaseStatus(purchaseId: string, newStatus: Purcha
         });
         inventoryAdjusted = true;
       } else if (newStatus !== 'Received' && oldStatus === 'Received') {
-        // Decrease stock
         purchaseToUpdate.items.forEach(item => {
           const partIdx = parts.findIndex(p => p.partNumber === item.partNumber && p.mrp === `₹${item.unitCost.toFixed(2)}`);
           if (partIdx !== -1) {
@@ -200,12 +197,13 @@ export async function updatePurchaseStatus(purchaseId: string, newStatus: Purcha
       if (needsWrite) await writeData(PARTS_FILE, parts);
     }
     
-    await writeData(PURCHASES_FILE, purchases); // Save purchase status change
+    await writeData(PURCHASES_FILE, purchases); 
     revalidatePath('/purchases');
     if (inventoryAdjusted) {
       revalidatePath('/inventory');
-      revalidatePath('/dashboard'); // For low stock alerts
+      revalidatePath('/dashboard'); 
     }
+    revalidatePath('/reports'); // Added revalidatePath for reports
     return { success: true, message: `Purchase ${purchaseId} status updated to ${newStatus}.`, inventoryAdjusted };
   } catch (error) {
     console.error('Error in updatePurchaseStatus:', error);
@@ -222,9 +220,8 @@ export async function updatePurchasePaymentSettled(purchaseId: string, paymentSe
     const purchaseToUpdate = purchases[purchaseIndex];
     if (purchaseToUpdate.paymentType !== 'on_credit') return { success: false, message: 'Payment status only applicable to "On Credit" POs.'};
 
-    const oldPaymentSettled = purchaseToUpdate.paymentSettled ?? false; // Default to false if undefined
+    const oldPaymentSettled = purchaseToUpdate.paymentSettled ?? false; 
     
-    // Only proceed if the status actually changes
     if (oldPaymentSettled === paymentSettled) {
         return { success: true, message: `Purchase ${purchaseId} payment status already ${paymentSettled ? 'Paid' : 'Due'}. No change made.` };
     }
@@ -246,9 +243,10 @@ export async function updatePurchasePaymentSettled(purchaseId: string, paymentSe
         supplierBalanceUpdatedMessage = " Supplier not found for balance update.";
     }
     
-    await writeData(PURCHASES_FILE, purchases); // Save purchases file
+    await writeData(PURCHASES_FILE, purchases); 
     revalidatePath('/purchases');
-    revalidatePath('/dashboard'); // Dashboard might show supplier balance summaries or related info
+    revalidatePath('/dashboard'); 
+    revalidatePath('/reports'); // Added revalidatePath for reports
 
     return { success: true, message: `Purchase ${purchaseId} payment status updated to ${paymentSettled ? 'Paid' : 'Due'}.${supplierBalanceUpdatedMessage}` };
   } catch (error) {
