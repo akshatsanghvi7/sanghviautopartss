@@ -68,7 +68,7 @@ export function LoginForm() {
             <Input
               id="username"
               type="text"
-              placeholder="e.g. anuragsanghvi"
+              placeholder="Enter your username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
