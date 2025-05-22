@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,8 +25,11 @@ export function UserNav() {
 
   const getInitials = (name: string) => {
     const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
-    return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+    if (names.length === 1 && names[0].length > 0) return names[0].substring(0, 2).toUpperCase();
+    if (names.length > 1 && names[0].length > 0 && names[names.length - 1].length > 0) {
+        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase(); // Fallback for single word or empty parts
   }
 
   return (
@@ -33,7 +37,8 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-9 w-9 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(user.username)}`} alt={user.username} data-ai-hint="abstract avatar" />
+            {/* Since avatarUrl is removed, AvatarImage src will be undefined, relying on Fallback */}
+            <AvatarImage src={undefined} alt={user.username} data-ai-hint="abstract avatar" />
             <AvatarFallback>{getInitials(user.username)}</AvatarFallback>
           </Avatar>
         </Button>

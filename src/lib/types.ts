@@ -10,7 +10,7 @@ export type UserProfile = {
   username: string; // Acts as the ID
   fullName: string;
   email: string;
-  avatarUrl?: string; // Optional field for avatar image URL
+  // avatarUrl?: string; // Removed
 };
 
 export type Part = {
@@ -94,4 +94,3 @@ export type Supplier = {
   phone?: string;
   balance: number; // Represents amount owed to supplier. Positive means we owe them.
 };
-

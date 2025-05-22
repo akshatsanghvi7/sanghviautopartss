@@ -17,7 +17,7 @@ function deriveFullName(username: string): string {
 
 export async function getUserProfile(username: string): Promise<UserProfile> {
   if (!username) {
-    return { username: '', fullName: 'Guest User', email: '', avatarUrl: undefined };
+    return { username: '', fullName: 'Guest User', email: '' };
   }
   const profiles = await readData<UserProfile[]>(USER_PROFILES_FILE, []);
   const userProfile = profiles.find(p => p.username === username);
@@ -30,7 +30,6 @@ export async function getUserProfile(username: string): Promise<UserProfile> {
       username: username,
       fullName: deriveFullName(username),
       email: `${username}@autocentral.app`, // Default placeholder
-      avatarUrl: undefined, // No default avatar URL
     };
   }
 }
@@ -43,18 +42,20 @@ export async function saveUserProfile(profileData: UserProfile): Promise<{ succe
     let profiles = await readData<UserProfile[]>(USER_PROFILES_FILE, []);
     const existingProfileIndex = profiles.findIndex(p => p.username === profileData.username);
 
+    const profileToSave: UserProfile = {
+        username: profileData.username,
+        fullName: profileData.fullName,
+        email: profileData.email,
+    };
+
     if (existingProfileIndex !== -1) {
-      profiles[existingProfileIndex] = profileData;
+      profiles[existingProfileIndex] = profileToSave;
     } else {
-      profiles.push(profileData);
+      profiles.push(profileToSave);
     }
 
     await writeData(USER_PROFILES_FILE, profiles);
-    revalidatePath('/profile'); // Revalidate the profile page
-    // Revalidate AppLayout if UserNav uses avatarUrl directly from a context that might be updated
-    // For now, UserNav's avatar is static, so only /profile is strictly needed.
-    // Consider revalidating layout if UserNav becomes more dynamic with avatarUrl.
-    // revalidatePath('/layout'); 
+    revalidatePath('/profile'); 
     return { success: true, message: 'Profile updated successfully.' };
   } catch (error) {
     console.error('Error saving user profile:', error);

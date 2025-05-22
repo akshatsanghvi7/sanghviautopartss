@@ -20,7 +20,7 @@ export default function ProfilePage() {
   const [profileDetails, setProfileDetails] = useState<UserProfile | null>(null);
   const [fullNameInput, setFullNameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  const [avatarUrlInput, setAvatarUrlInput] = useState('');
+  // const [avatarUrlInput, setAvatarUrlInput] = useState(''); // Removed
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   // Static details (not fetched from profile, but from auth or hardcoded for demo)
@@ -35,7 +35,7 @@ export default function ProfilePage() {
         setProfileDetails(fetchedProfile);
         setFullNameInput(fetchedProfile.fullName);
         setEmailInput(fetchedProfile.email);
-        setAvatarUrlInput(fetchedProfile.avatarUrl || '');
+        // setAvatarUrlInput(fetchedProfile.avatarUrl || ''); // Removed
         setIsLoadingProfile(false);
       });
     } else {
@@ -60,11 +60,10 @@ export default function ProfilePage() {
       return;
     }
     const updatedProfile: UserProfile = {
-      ...profileDetails,
       username: user.username, // Ensure username from auth is used
       fullName: fullNameInput,
       email: emailInput,
-      avatarUrl: avatarUrlInput || undefined, // Store as undefined if empty
+      // avatarUrl: avatarUrlInput || undefined, // Removed
     };
     startTransition(async () => {
       const result = await saveUserProfile(updatedProfile);
@@ -109,7 +108,7 @@ export default function ProfilePage() {
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <Avatar className="h-24 w-24">
               <AvatarImage 
-                src={profileDetails.avatarUrl || undefined} // Use undefined to trigger fallback correctly
+                src={undefined} // No avatar URL to provide
                 alt={fullNameInput || user.username} 
                 data-ai-hint="person portrait" 
               />
@@ -121,7 +120,6 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground">Role: {role}</p>
               <p className="text-sm text-muted-foreground">Joined: {new Date(joinDate).toLocaleDateString()}</p>
             </div>
-            {/* "Change Avatar" button removed */}
           </div>
 
           <Separator />
@@ -139,17 +137,8 @@ export default function ProfilePage() {
               <Label htmlFor="email">Email Address</Label>
               <Input id="email" type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="avatarUrl">Avatar URL (Optional)</Label>
-              <Input 
-                id="avatarUrl" 
-                type="url" 
-                value={avatarUrlInput} 
-                onChange={(e) => setAvatarUrlInput(e.target.value)} 
-                placeholder="https://example.com/image.png"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2"> 
+            {/* Avatar URL input removed */}
+            <div className="space-y-2"> 
               <Label htmlFor="role">Role</Label>
               <Input id="role" value={role} disabled />
             </div>
