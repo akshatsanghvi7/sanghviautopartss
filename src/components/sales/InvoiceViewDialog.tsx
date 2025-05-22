@@ -16,16 +16,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Mail, Printer, Phone, Building } from 'lucide-react'; // Added Phone, Building
+import { Mail, Download, Phone, Building } from 'lucide-react'; // Changed Printer to Download
 import { useToast } from '@/hooks/use-toast';
 import AppLogo from '@/components/layout/AppLogo';
-import type { AppSettings } from '@/app/settings/actions'; // Import AppSettings
+import type { AppSettings } from '@/app/settings/actions';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface InvoiceViewDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   sale: Sale | null;
-  companySettings: AppSettings; // Add companySettings prop
+  companySettings: AppSettings; 
 }
 
 export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings }: InvoiceViewDialogProps) {
@@ -48,11 +50,54 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
     }
   };
 
-  const handlePrintInvoice = () => {
-    toast({
-        title: "Print Initiated (Simulated)",
-        description: "If this were a real app, a print dialog would appear.",
-    });
+  const handleDownloadPdf = () => {
+    const invoiceElement = document.getElementById('printable-invoice-area');
+    if (invoiceElement) {
+      toast({ title: "Generating PDF...", description: "Please wait while your invoice is prepared." });
+      html2canvas(invoiceElement, { 
+        scale: 2, // Increase scale for better quality
+        useCORS: true, 
+        logging: false, // Reduce console noise
+      }).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'pt',
+          format: 'a4',
+        });
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        
+        // Calculate the ratio to fit the image onto the PDF page, maintaining aspect ratio
+        const imgRatio = canvasWidth / canvasHeight;
+        const pdfRatio = pdfWidth / pdfHeight;
+
+        let finalPdfImageWidth = pdfWidth;
+        let finalPdfImageHeight = pdfWidth / imgRatio;
+
+        if (finalPdfImageHeight > pdfHeight) {
+            finalPdfImageHeight = pdfHeight;
+            finalPdfImageWidth = pdfHeight * imgRatio;
+        }
+        
+        // Center the image on the page
+        const xOffset = (pdfWidth - finalPdfImageWidth) / 2;
+        const yOffset = 0; // Start from top or add small margin e.g. 20
+
+        pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalPdfImageWidth, finalPdfImageHeight);
+        pdf.save(`invoice-${sale.id}.pdf`);
+        toast({ title: "Invoice Downloaded", description: "Your PDF invoice has been downloaded." });
+      }).catch(err => {
+        console.error("Error generating PDF:", err);
+        toast({ title: "PDF Download Failed", description: "Could not generate the PDF.", variant: "destructive" });
+      });
+    } else {
+      toast({ title: "Error", description: "Could not find invoice content to download.", variant: "destructive" });
+    }
   };
 
 
@@ -66,8 +111,8 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[65vh] pr-6" id="invoice-content">
-          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm">
+        <ScrollArea className="h-[65vh] pr-6 custom-scrollbar" id="invoice-content-scrollarea"> {/* ID changed for clarity */}
+          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm" id="printable-invoice-area"> {/* Added ID here */}
             {/* Invoice Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
@@ -164,8 +209,8 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
           <Button variant="outline" onClick={handleMailInvoice} disabled={!sale.emailAddress}>
             <Mail className="mr-2 h-4 w-4" /> Mail Invoice
           </Button>
-          <Button variant="outline" onClick={handlePrintInvoice}>
-            <Printer className="mr-2 h-4 w-4" /> Print Invoice
+          <Button variant="outline" onClick={handleDownloadPdf}>
+            <Download className="mr-2 h-4 w-4" /> Download PDF 
           </Button>
           <DialogClose asChild>
             <Button type="button">Close</Button>

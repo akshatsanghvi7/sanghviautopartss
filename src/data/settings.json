@@ -1,11 +1,10 @@
-
 {
-  "companyName": "AutoCentral Inc.",
+  "companyName": "Auto Parts",
   "companyAddress": "123 Auto Drive, Carville, ST 12345",
   "lowStockAlertsEnabled": true,
-  "companyGstNumber": "",
+  "companyGstNumber": "24AAACC1206D1ZM",
   "companyPhoneNumbers": [
-    "",
+    "+919479725477",
     ""
   ]
 }
