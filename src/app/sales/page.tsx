@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { getSales, getInventoryParts, getCustomers } from './actions';
 import { SalesClientPage } from './SalesClientPage';
 import type { Sale, Part, Customer } from '@/lib/types';
+import { getSettings } from '@/app/settings/actions'; // Import getSettings
 
 // Initial mock data if files are empty or not found
 const initialMockSales: Sale[] = [
@@ -24,6 +25,7 @@ export default async function SalesPage() {
   const sales = await getSales();
   const inventoryParts = await getInventoryParts();
   const customers = await getCustomers(); // Customers are also needed for context/potential updates
+  const settings = await getSettings(); // Fetch company settings
 
   const currentSales = sales.length > 0 ? sales : initialMockSales;
   const currentParts = inventoryParts.length > 0 ? inventoryParts : initialMockParts;
@@ -34,6 +36,8 @@ export default async function SalesPage() {
       initialSales={currentSales} 
       initialInventoryParts={currentParts}
       initialCustomers={customers} // Pass all customers for context
+      companySettings={settings} // Pass company settings
     />
   );
 }
+

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -15,14 +16,16 @@ import { InvoiceViewDialog } from '@/components/sales/InvoiceViewDialog';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { addSale, updateSalePaymentType } from './actions';
+import type { AppSettings } from '@/app/settings/actions'; // Import AppSettings type
 
 interface SalesClientPageProps {
   initialSales: Sale[];
   initialInventoryParts: Part[];
-  initialCustomers: Customer[]; // For context, not directly modified here but Server Action handles it
+  initialCustomers: Customer[]; 
+  companySettings: AppSettings; // Add companySettings prop
 }
 
-export function SalesClientPage({ initialSales, initialInventoryParts, initialCustomers }: SalesClientPageProps) {
+export function SalesClientPage({ initialSales, initialInventoryParts, initialCustomers, companySettings }: SalesClientPageProps) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [sales, setSales] = useState<Sale[]>(initialSales);
@@ -174,7 +177,14 @@ export function SalesClientPage({ initialSales, initialInventoryParts, initialCu
         </CardContent>
       </Card>
       <SaleFormDialog isOpen={isSaleFormOpen} onOpenChange={setIsSaleFormOpen} onSubmit={handleNewSaleSubmit} inventoryParts={inventoryParts} />
-      {selectedSaleForInvoice && (<InvoiceViewDialog isOpen={isInvoiceViewOpen} onOpenChange={setIsInvoiceViewOpen} sale={selectedSaleForInvoice} />)}
+      {selectedSaleForInvoice && (
+        <InvoiceViewDialog 
+            isOpen={isInvoiceViewOpen} 
+            onOpenChange={setIsInvoiceViewOpen} 
+            sale={selectedSaleForInvoice} 
+            companySettings={companySettings} // Pass companySettings to InvoiceViewDialog
+        />
+      )}
     </div>
   );
 }

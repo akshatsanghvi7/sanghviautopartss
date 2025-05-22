@@ -16,18 +16,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Mail, Printer } from 'lucide-react';
+import { Mail, Printer, Phone, Building } from 'lucide-react'; // Added Phone, Building
 import { useToast } from '@/hooks/use-toast';
 import AppLogo from '@/components/layout/AppLogo';
-
+import type { AppSettings } from '@/app/settings/actions'; // Import AppSettings
 
 interface InvoiceViewDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   sale: Sale | null;
+  companySettings: AppSettings; // Add companySettings prop
 }
 
-export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDialogProps) {
+export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings }: InvoiceViewDialogProps) {
   const { toast } = useToast();
 
   if (!sale) return null;
@@ -71,9 +72,11 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale }: InvoiceViewDia
             <div className="flex justify-between items-start mb-6">
               <div>
                 <AppLogo className="h-12 w-12 text-primary mb-2" />
-                <h2 className="text-2xl font-bold text-primary">AutoCentral Inc.</h2>
-                <p className="text-muted-foreground">123 Auto Drive, Carville, ST 12345</p>
-                <p className="text-muted-foreground">contact@autocentral.com</p>
+                <h2 className="text-2xl font-bold text-primary">{companySettings.companyName || 'AutoCentral Inc.'}</h2>
+                {companySettings.companyAddress && <p className="text-muted-foreground text-sm flex items-center gap-1"><Building className="h-3 w-3"/>{companySettings.companyAddress}</p>}
+                {companySettings.companyGstNumber && <p className="text-muted-foreground text-sm">GSTIN: {companySettings.companyGstNumber}</p>}
+                {companySettings.companyPhoneNumbers?.[0] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[0]}</p>}
+                {companySettings.companyPhoneNumbers?.[1] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[1]}</p>}
               </div>
               <div className="text-right">
                 <h1 className="text-3xl font-bold uppercase text-primary">Invoice</h1>
