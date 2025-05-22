@@ -3,46 +3,15 @@
 
 import type { ReactNode } from 'react';
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // Added usePathname
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarInset, SidebarRail } from "@/components/ui/sidebar";
-import { Header } from '@/components/layout/Header'; // Header will fetch its own companyName
+import { Header } from '@/components/layout/Header';
 import { SidebarNavItems } from '@/components/layout/SidebarNavItems';
 import AppLogo from './AppLogo';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import type { Part } from '@/lib/types';
-// For AppLayout specific needs (low stock alert), we'll fetch settings and parts via a client-side call to a server action or API route if needed,
-// or rely on data passed down if settings were fetched at a higher level server component.
-// For now, to keep it simpler for the low-stock alert without a dedicated API route:
-// We'll assume settings/parts are not directly available here for the low stock check without a prop or new fetch.
-// Let's make a client-side function to fetch necessary data for the alert.
-
-// Temporary client-side action to fetch minimal data for alerts.
-// In a real app, this might be an API route or passed down differently.
-async function getLowStockAlertDataClient(): Promise<{ lowStockAlertsEnabled: boolean; inventoryPartsCount: number; lowStockItemsCount: number }> {
-  try {
-    // This is a conceptual fetch; direct fs access isn't possible in client components.
-    // This would normally call a Server Action or an API route.
-    // For this simulation, we can't directly call readData here.
-    // We'll simulate the outcome based on the assumption that settings are enabled and some parts are low.
-    // This part needs to be re-evaluated if direct server action call from client useEffect is desired.
-    // For this iteration, I will adjust the logic to *not* directly perform file reads here.
-    // The AppLayout is a client component due to auth. We'd need to call a Server Action.
-
-    // Fetching via a dedicated Server Action:
-    const response = await fetch('/api/app-status'); // Conceptual API endpoint
-    if (!response.ok) throw new Error('Failed to fetch app status');
-    const data = await response.json();
-    return data;
-
-  } catch (error) {
-    console.warn("Could not fetch low stock alert data for AppLayout:", error);
-    // Default to alerts enabled, but no low stock items to avoid false positives if fetch fails
-    return { lowStockAlertsEnabled: true, inventoryPartsCount: 0, lowStockItemsCount: 0 };
-  }
-}
-
 
 export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEnabledFromSettings, initialInventoryPartsForAlert } : { 
     children: ReactNode, 
@@ -52,6 +21,7 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname(); // Get current path
   const { toast } = useToast();
   
   const [effectiveCompanyName, setEffectiveCompanyName] = useState(companyNameFromSettings || "AutoCentral");
@@ -62,10 +32,11 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
   }, [companyNameFromSettings]);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    // If we are on a page other than login, and not loading, and no user, redirect to login.
+    if (pathname !== '/login' && !isLoading && !user) {
       router.replace('/login');
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, pathname]); // Added pathname to dependencies
 
   useEffect(() => {
     if (!isLoading && user && lowStockAlertsEnabledFromSettings && !lowStockNotificationShownThisSession) {
@@ -84,6 +55,15 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
     }
   }, [user, isLoading, lowStockAlertsEnabledFromSettings, initialInventoryPartsForAlert, toast, lowStockNotificationShownThisSession]);
 
+  // If the current page is the login page, just render the children (LoginPage content).
+  // AuthProvider still wraps everything, so LoginPage gets the auth context.
+  if (pathname === '/login') {
+    return <>{children}</>;
+  }
+
+  // If still loading auth state OR if there's no user (and we're not on /login page),
+  // show a global loading spinner for the app shell.
+  // The useEffect above will handle redirecting to /login if !user.
   if (isLoading || !user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -92,6 +72,7 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
     );
   }
 
+  // If authenticated and not on login page, render the full AppLayout with Sidebar, Header etc.
   return (
     <SidebarProvider defaultOpen={true}>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
@@ -106,8 +87,10 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
         <SidebarFooter className="p-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">© {new Date().getFullYear()} {effectiveCompanyName || 'AutoCentral Inc.'}</SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col">
-        <Header companyNameFromSettings={effectiveCompanyName} /> {/* Pass company name to Header */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-background">{children}</main>
+        <Header companyNameFromSettings={effectiveCompanyName} />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-background">
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );
