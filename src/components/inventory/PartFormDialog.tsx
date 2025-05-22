@@ -17,7 +17,6 @@ import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import React, { useEffect } from 'react';
-import { useToast } from '@/hooks/use-toast';
 
 const partSchema = z.object({
   partName: z.string().min(1, "Part Name is required"),
@@ -37,8 +36,8 @@ export type PartFormData = z.infer<typeof partSchema>;
 interface PartFormDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: PartFormData, originalPart?: Part) => void; // Pass originalPart for edit context
-  initialData?: Part | null; // This is the original Part object for editing
+  onSubmit: (data: PartFormData, originalPart?: Part) => void;
+  initialData?: Part | null;
   dialogTitle: string;
   formMode: 'add' | 'edit';
 }
@@ -51,7 +50,6 @@ export function PartFormDialog({
   dialogTitle,
   formMode,
 }: PartFormDialogProps) {
-  const { toast } = useToast();
   const {
     register,
     handleSubmit,
@@ -61,16 +59,6 @@ export function PartFormDialog({
   } = useForm<PartFormData>({
     resolver: zodResolver(partSchema),
   });
-
-  const formatMrpForDisplay = (mrpString?: string): string => {
-    if (!mrpString) return "";
-    // If it already starts with ₹, use as is, otherwise prepend and format
-    if (mrpString.startsWith('₹')) {
-      return mrpString;
-    }
-    const numericValue = parseFloat(mrpString.replace(/[^0-9.-]+/g, ""));
-    return isNaN(numericValue) ? "" : `₹${numericValue.toFixed(2)}`;
-  };
   
   const formatMrpForStorage = (mrpString: string): string => {
     if (mrpString.startsWith('₹')) {
@@ -81,28 +69,21 @@ export function PartFormDialog({
     return isNaN(numericValue) ? '₹0.00' : `₹${numericValue.toFixed(2)}`;
   };
 
-
   useEffect(() => {
     if (isOpen) {
       if (formMode === 'edit' && initialData) {
         setValue("partName", initialData.partName);
         setValue("otherName", initialData.otherName || "");
-        setValue("partNumber", initialData.partNumber); // PartNumber is disabled for edit
+        setValue("partNumber", initialData.partNumber);
         setValue("company", initialData.company || "");
         setValue("quantity", initialData.quantity);
         setValue("category", initialData.category);
-        setValue("mrp", initialData.mrp); // MRP is disabled for edit
+        setValue("mrp", initialData.mrp); 
         setValue("shelf", initialData.shelf || "");
       } else { 
         reset({
-          partName: "",
-          otherName: "",
-          partNumber: "",
-          company: "",
-          quantity: 0,
-          category: "",
-          mrp: "",
-          shelf: "",
+          partName: "", otherName: "", partNumber: "", company: "",
+          quantity: 0, category: "", mrp: "₹", shelf: "",
         });
       }
     }
@@ -113,21 +94,19 @@ export function PartFormDialog({
       ...data,
       mrp: formatMrpForStorage(data.mrp),
     };
-    onSubmit(submittedDataWithFormattedMrp, initialData || undefined); // Pass initialData as originalPart
-    reset(); 
-    onOpenChange(false); 
+    onSubmit(submittedDataWithFormattedMrp, initialData || undefined);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) reset(); 
+      if (!open) reset({ partName: "", otherName: "", partNumber: "", company: "", quantity: 0, category: "", mrp: "₹", shelf: "" }); 
       onOpenChange(open);
     }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>
-            {formMode === 'edit' ? "Edit details for this part entry. Part Number and MRP cannot be changed." : 
+            {formMode === 'edit' ? "Edit details. Part Number and MRP cannot be changed here." : 
             "Enter details. If Part Number and MRP match an existing entry, it will be updated. Otherwise, a new entry is created."}
           </DialogDescription>
         </DialogHeader>
@@ -178,15 +157,13 @@ export function PartFormDialog({
             <Input id="shelf" {...register("shelf")} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
+            <Button type="button" variant="outline" onClick={() => { reset({ partName: "", otherName: "", partNumber: "", company: "", quantity: 0, category: "", mrp: "₹", shelf: "" }); onOpenChange(false); }}>
               Cancel
             </Button>
-            <Button type="submit">{formMode === 'edit' ? "Save Changes" : "Add/Update Part Entry"}</Button>
+            <Button type="submit">{dialogTitle === 'Edit Part Entry' ? "Save Changes" : "Add/Update Part Entry"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-
-    
