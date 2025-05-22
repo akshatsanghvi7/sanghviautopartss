@@ -58,7 +58,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
         scale: 2, 
         useCORS: true, 
         logging: false,
-        letterRendering: true, // Added for potentially better text rendering
+        letterRendering: true,
       }).then((canvas) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
@@ -69,7 +69,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        const margin = 20; // General margin for top/bottom/left/right in points
+        const margin = 20; 
 
         const usablePdfWidth = pdfWidth - 2 * margin;
         const usablePdfHeight = pdfHeight - 2 * margin;
@@ -80,13 +80,10 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
 
         let finalImageWidth, finalImageHeight;
 
-        // Determine if we should fit by width or by height based on aspect ratios
         if (usablePdfWidth / canvasAspectRatio <= usablePdfHeight) {
-            // Fit by width
             finalImageWidth = usablePdfWidth;
             finalImageHeight = finalImageWidth / canvasAspectRatio;
         } else {
-            // Fit by height
             finalImageHeight = usablePdfHeight;
             finalImageWidth = finalImageHeight * canvasAspectRatio;
         }
@@ -121,7 +118,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
           <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm" id="printable-invoice-area">
             {/* Invoice Header */}
             <div className="flex justify-between items-start mb-6">
-              <div>
+              <div className="flex-1">
                 <AppLogo className="h-12 w-12 text-primary mb-2" />
                 <h2 className="text-2xl font-bold text-primary">{companySettings.companyName || 'AutoCentral Inc.'}</h2>
                 {companySettings.companyAddress && <p className="text-muted-foreground text-sm flex items-center gap-1"><Building className="h-3 w-3"/>{companySettings.companyAddress}</p>}
@@ -129,7 +126,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
                 {companySettings.companyPhoneNumbers?.[0] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[0]}</p>}
                 {companySettings.companyPhoneNumbers?.[1] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[1]}</p>}
               </div>
-              <div className="text-right">
+              <div className="flex-1 text-right">
                 <h1 className="text-3xl font-bold uppercase text-primary">Invoice</h1>
                 <p className="text-muted-foreground">Invoice #: {sale.id}</p>
                 <p className="text-muted-foreground">Date: {format(new Date(sale.date), "PPP")}</p>
@@ -147,9 +144,9 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
                 {sale.emailAddress && <p className="text-muted-foreground">{sale.emailAddress}</p>}
                 {sale.gstNumber && <p className="text-muted-foreground">GSTIN: {sale.gstNumber}</p>}
               </div>
-              <div className="text-right">
-                 <h3 className="font-semibold text-lg mb-1 text-primary">Payment Details:</h3>
-                 <p>Payment Type: <span className="font-medium">{sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}</span></p>
+              <div className="flex flex-col items-end"> {/* Apply flex and align-items-end for better control */}
+                 <h3 className="font-semibold text-lg mb-1 text-primary self-end">Payment Details:</h3>
+                 <p className="self-end">Payment Type: <span className="font-medium">{sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}</span></p>
               </div>
             </div>
 
@@ -185,18 +182,18 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
               <div className="w-full max-w-xs space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">₹{sale.subTotal.toFixed(2)}</span>
+                  <span className="font-medium text-right">₹{sale.subTotal.toFixed(2)}</span>
                 </div>
                 {sale.discount !== undefined && sale.discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Discount:</span>
-                    <span className="font-medium">-₹{sale.discount.toFixed(2)}</span>
+                    <span className="font-medium text-right">-₹{sale.discount.toFixed(2)}</span>
                   </div>
                 )}
                  <Separator />
                 <div className="flex justify-between text-lg font-bold">
                   <span className="text-primary">Net Amount:</span>
-                  <span className="text-primary">₹{sale.netAmount.toFixed(2)}</span>
+                  <span className="text-primary text-right">₹{sale.netAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -226,3 +223,4 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
     </Dialog>
   );
 }
+
