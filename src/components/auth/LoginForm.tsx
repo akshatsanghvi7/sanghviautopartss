@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -8,6 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { LogIn } from 'lucide-react';
 import AppLogo from '@/components/layout/AppLogo';
+
+const validCredentials = [
+  { username: 'anuragsanghvi', password: '9425104577' },
+  { username: 'aashishsanghvi', password: '9425027677' },
+  { username: 'akshatsanghvi', password: '9479725477' },
+];
 
 export function LoginForm() {
   const [username, setUsername] = useState('');
@@ -20,16 +27,24 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+
     if (!username || !password) {
       setError('Please enter both username and password.');
       setIsLoading(false);
       return;
     }
-    // Simulate password check - in a real app, this would be an API call
-    if (password === 'password') { // Example: allow any username with 'password'
+
+    const isValidUser = validCredentials.find(
+      (cred) => cred.username === username && cred.password === password
+    );
+
+    if (isValidUser) {
       try {
         await login(username);
+        // router.push('/dashboard') will be handled by AuthContext's login method
       } catch (err) {
+        // This catch is for potential errors in the login function itself,
+        // though our mock login is unlikely to throw.
         setError('Login failed. Please try again.');
         setIsLoading(false);
       }
@@ -53,7 +68,7 @@ export function LoginForm() {
             <Input
               id="username"
               type="text"
-              placeholder="e.g. john.doe"
+              placeholder="e.g. anuragsanghvi"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -87,7 +102,7 @@ export function LoginForm() {
         </form>
       </CardContent>
       <CardFooter className="text-center text-sm text-muted-foreground">
-        <p>Use any username and "password" to log in.</p>
+        <p>Enter one of the authorized credentials.</p>
       </CardFooter>
     </Card>
   );
