@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { SupplierPurchaseHistoryDialog } from '@/components/suppliers/SupplierPurchaseHistoryDialog';
 import { AdjustSupplierBalanceDialog } from '@/components/suppliers/AdjustSupplierBalanceDialog';
-import { updateSupplierBalanceAction } from './actions';
+import { DeleteSupplierDialog } from '@/components/suppliers/DeleteSupplierDialog'; // New import
+import { updateSupplierBalanceAction, deleteSupplierAction } from './actions'; // Import deleteSupplierAction
 
 const excelColumns = ["Supplier ID", "Name", "Contact Person", "Email", "Phone", "Balance Owed (₹)"];
 
@@ -30,18 +32,20 @@ export function SuppliersClientPage({ initialSuppliers, allPurchasesForHistory }
   const [isAdjustBalanceDialogOpen, setIsAdjustBalanceDialogOpen] = useState(false);
   const [selectedSupplierForBalance, setSelectedSupplierForBalance] = useState<Supplier | null>(null);
 
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); // State for delete dialog
+  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null); // State for supplier to delete
+
   useEffect(() => {
     setSuppliers(initialSuppliers);
   }, [initialSuppliers]);
 
-  // De-duplication by ID for display (server action should provide primary de-duplicated list)
   const uniqueSuppliers = useMemo(() => {
     const seenIds = new Set<string>();
     return suppliers.filter(supplier => {
       if (!supplier || !supplier.id || seenIds.has(supplier.id)) return false;
       seenIds.add(supplier.id);
       return true;
-    }).map(s => ({...s, balance: Number(s.balance) || 0})); // Ensure balance is number
+    }).map(s => ({...s, balance: Number(s.balance) || 0}));
   }, [suppliers]);
 
   const filteredSuppliers = uniqueSuppliers.filter(supplier =>
@@ -52,7 +56,27 @@ export function SuppliersClientPage({ initialSuppliers, allPurchasesForHistory }
 
   const handleAddSupplier = () => toast({ title: "Info", description: "Suppliers are automatically added/updated via Purchase Orders." });
   const handleEditSupplier = (supplierId: string) => toast({ title: "Feature Coming Soon", description: `Editing supplier ${supplierId} will allow correcting details.` });
-  const handleDeleteSupplier = (supplierId: string) => toast({ title: "Feature Coming Soon", description: `Deleting supplier ${supplierId} will be implemented.` });
+  
+  const handleDeleteSupplierClick = (supplier: Supplier) => {
+    setSupplierToDelete(supplier);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteSupplier = async () => {
+    if (!supplierToDelete) return;
+    startTransition(async () => {
+      const result = await deleteSupplierAction(supplierToDelete.id);
+      if (result.success) {
+        toast({ title: "Supplier Deleted", description: `${supplierToDelete.name} has been deleted.` });
+        // The list will re-render due to revalidatePath in the server action
+      } else {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+      }
+      setIsDeleteConfirmOpen(false);
+      setSupplierToDelete(null);
+    });
+  };
+
   const handleViewHistory = (supplier: Supplier) => { setSelectedSupplierForHistory(supplier); setIsHistoryDialogOpen(true); };
   const handleOpenAdjustBalanceDialog = (supplier: Supplier) => { setSelectedSupplierForBalance(supplier); setIsAdjustBalanceDialogOpen(true); };
 
@@ -115,7 +139,7 @@ export function SuppliersClientPage({ initialSuppliers, allPurchasesForHistory }
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(supplier)} title="View Purchase History"><History className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="hover:text-amber-600" onClick={() => handleOpenAdjustBalanceDialog(supplier)} title="Adjust Balance"><Coins className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditSupplier(supplier.id)} title="Edit Supplier"><Edit2 className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteSupplier(supplier.id)} title="Delete Supplier"><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteSupplierClick(supplier)} title="Delete Supplier"><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -126,6 +150,14 @@ export function SuppliersClientPage({ initialSuppliers, allPurchasesForHistory }
       </Card>
       {selectedSupplierForHistory && (<SupplierPurchaseHistoryDialog isOpen={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen} supplier={selectedSupplierForHistory} allPurchases={allPurchasesForHistory} />)}
       {selectedSupplierForBalance && (<AdjustSupplierBalanceDialog isOpen={isAdjustBalanceDialogOpen} onOpenChange={setIsAdjustBalanceDialogOpen} supplier={selectedSupplierForBalance} onSubmit={handleUpdateSupplierBalance} />)}
+      {supplierToDelete && (
+        <DeleteSupplierDialog
+          isOpen={isDeleteConfirmOpen}
+          onOpenChange={setIsDeleteConfirmOpen}
+          onConfirm={confirmDeleteSupplier}
+          supplierName={supplierToDelete.name}
+        />
+      )}
     </div>
   );
 }

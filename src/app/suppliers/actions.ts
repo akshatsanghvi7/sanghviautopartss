@@ -32,14 +32,18 @@ export async function getSuppliersWithCalculatedBalances(): Promise<Supplier[]> 
 
   purchases.forEach(purchase => {
     if (purchase.paymentType === 'on_credit' && !(purchase.paymentSettled === true)) {
-      const supplier = supplierMap.get(purchase.supplierId!) || 
-                       Array.from(supplierMap.values()).find(s => s.name.toLowerCase() === purchase.supplierName.toLowerCase());
+      // Try to find supplier by ID first, then by name if ID is missing (for older data or flexibility)
+      let supplier: Supplier | undefined = undefined;
+      if (purchase.supplierId) {
+        supplier = supplierMap.get(purchase.supplierId);
+      }
+      if (!supplier) {
+        supplier = Array.from(supplierMap.values()).find(s => s.name.toLowerCase() === purchase.supplierName.toLowerCase());
+      }
       
       if (supplier) {
         supplier.balance += purchase.netAmount;
       }
-      // If supplier not found in map, it means it might have been added directly to purchases
-      // but not yet to suppliers.json. The primary add/update logic is in purchase actions.
     }
   });
 
@@ -61,6 +65,27 @@ export async function updateSupplierBalanceAction(supplierId: string, newBalance
   } catch (error) {
     console.error('Error in updateSupplierBalanceAction:', error);
     return { success: false, message: 'Failed to update supplier balance.' };
+  }
+}
+
+export async function deleteSupplierAction(supplierId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    let suppliers = await readData<Supplier[]>(SUPPLIERS_FILE, []);
+    const initialLength = suppliers.length;
+    suppliers = suppliers.filter(supplier => supplier.id !== supplierId);
+
+    if (suppliers.length === initialLength) {
+      return { success: false, message: 'Supplier not found.' };
+    }
+
+    await writeData(SUPPLIERS_FILE, suppliers);
+    revalidatePath('/suppliers');
+    revalidatePath('/purchases'); // Purchases might reference this supplier
+    revalidatePath('/dashboard'); // Supplier count might change
+    return { success: true, message: 'Supplier deleted successfully.' };
+  } catch (error) {
+    console.error('Error deleting supplier:', error);
+    return { success: false, message: 'Failed to delete supplier.' };
   }
 }
 
