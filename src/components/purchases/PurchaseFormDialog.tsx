@@ -1,6 +1,7 @@
+
 "use client";
 
-import type { Part, PurchaseItem as PurchaseItemType, Supplier } from '@/lib/types';
+import type { Part, PurchaseItem as PurchaseItemType, Supplier, Purchase } from '@/lib/types';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ const purchaseFormSchema = z.object({
   shippingCosts: z.coerce.number().min(0, "Cannot be negative").optional(),
   otherCharges: z.coerce.number().min(0, "Cannot be negative").optional(),
   notes: z.string().optional(),
+  // No 'paymentSettled' here, it's derived or handled server-side based on paymentType initially
 });
 
 export type PurchaseFormData = z.infer<typeof purchaseFormSchema>;
@@ -45,10 +47,9 @@ export type PurchaseFormData = z.infer<typeof purchaseFormSchema>;
 interface PurchaseFormDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: PurchaseFormData) => void;
+  onSubmit: (data: Omit<Purchase, 'id' | 'paymentSettled'>) => void; // onSubmit expects data without id
   inventoryParts: Part[];
   inventorySuppliers: Supplier[];
-  initialData?: PurchaseFormData & { id?: string }; // Not used for now, for add only
 }
 
 export function PurchaseFormDialog({ isOpen, onOpenChange, onSubmit, inventoryParts, inventorySuppliers }: PurchaseFormDialogProps) {
@@ -96,18 +97,18 @@ export function PurchaseFormDialog({ isOpen, onOpenChange, onSubmit, inventoryPa
   const selectPartFromSearch = (part: Part) => { setSelectedPartForAdding(part); setPartSearchTerm(part.partName); };
 
   const handleAddItem = () => {
-    if (!selectedPartForAdding) { toast({ title: "No Part Selected", variant: "destructive" }); return; }
+    if (!selectedPartForAdding) { toast({ title: "No Part Selected", description: "Please search and select a valid part.", variant: "destructive" }); return; }
     const quantity = Number(currentQuantityInput); const unitCost = Number(currentUnitCostInput);
-    if (isNaN(quantity) || quantity <= 0) { toast({ title: "Invalid Quantity", variant: "destructive" }); return; }
-    if (isNaN(unitCost) || unitCost < 0) { toast({ title: "Invalid Unit Cost", variant: "destructive" }); return; }
-    const existingItemIndex = fields.findIndex(item => item.partNumber === selectedPartForAdding.partNumber);
+    if (isNaN(quantity) || quantity <= 0) { toast({ title: "Invalid Quantity", description: "Please enter a valid quantity greater than 0.", variant: "destructive" }); return; }
+    if (isNaN(unitCost) || unitCost < 0) { toast({ title: "Invalid Unit Cost", description: "Please enter a valid unit cost (zero or positive).", variant: "destructive" }); return; }
+    const existingItemIndex = fields.findIndex(item => item.partNumber === selectedPartForAdding.partNumber && item.unitCost === unitCost);
     if (existingItemIndex > -1) {
       setValue(`items.${existingItemIndex}.quantity`, fields[existingItemIndex].quantity + quantity);
-      setValue(`items.${existingItemIndex}.unitCost`, unitCost); 
-      toast({ title: "Item Updated" });
+      // Unit cost remains the same for this specific entry
+      toast({ title: "Item Updated", description: `Quantity for ${selectedPartForAdding.partName} (Cost: ₹${unitCost.toFixed(2)}) updated.` });
     } else {
       append({ partNumber: selectedPartForAdding.partNumber, partName: selectedPartForAdding.partName, quantity, unitCost });
-      toast({ title: "Item Added" });
+      toast({ title: "Item Added", description: `${quantity} x ${selectedPartForAdding.partName} at ₹${unitCost.toFixed(2)}/unit added to PO.` });
     }
     setPartSearchTerm(''); setSelectedPartForAdding(null); setCurrentQuantityInput(1); setCurrentUnitCostInput(0);
     document.getElementById('partSearch')?.focus(); 
@@ -116,14 +117,41 @@ export function PurchaseFormDialog({ isOpen, onOpenChange, onSubmit, inventoryPa
   const watchedItems = watch("items");
   const subTotal = watchedItems.reduce((acc, item) => acc + (item.quantity * item.unitCost), 0);
   const watchedShipping = watch("shippingCosts"); const watchedOtherCharges = watch("otherCharges");
-  const parseNumeric = (v:any) => typeof v === 'number' ? (isNaN(v)?0:v) : (typeof v === 'string' && v.trim() !== '' ? (parseFloat(v)||0) : 0);
+  const parseNumeric = (v:any): number => {
+      if (typeof v === 'number') return isNaN(v) ? 0 : v;
+      if (typeof v === 'string' && v.trim() !== '') {
+          const parsed = parseFloat(v);
+          return isNaN(parsed) ? 0 : parsed;
+      }
+      return 0;
+  };
   const numericShipping = parseNumeric(watchedShipping); const numericOtherCharges = parseNumeric(watchedOtherCharges);
   const netAmount = subTotal + numericShipping + numericOtherCharges;
   const filteredInventoryParts = inventoryParts.filter(p => partSearchTerm && (p.partName.toLowerCase().includes(partSearchTerm.toLowerCase()) || p.partNumber.toLowerCase().includes(partSearchTerm.toLowerCase()))).slice(0,5);
 
   const handleFormSubmitInternal: SubmitHandler<PurchaseFormData> = (data) => {
-    if (!data.purchaseDate) { toast({ title: "Date Missing", variant: "destructive" }); return; }
-    onSubmit({ ...data, shippingCosts: numericShipping, otherCharges: numericOtherCharges });
+    if (!data.purchaseDate) { toast({ title: "Purchase Date Missing", description: "Please select a purchase date.", variant: "destructive" }); return; }
+    
+    const purchaseDataForAction: Omit<Purchase, 'id' | 'paymentSettled'> = {
+      date: data.purchaseDate.toISOString(),
+      supplierId: data.supplierId,
+      supplierName: data.supplierName,
+      supplierInvoiceNumber: data.supplierInvoiceNumber,
+      items: data.items.map(item => ({ ...item, itemTotal: item.quantity * item.unitCost })),
+      subTotal: subTotal,
+      shippingCosts: numericShipping,
+      otherCharges: numericOtherCharges,
+      netAmount: netAmount,
+      paymentType: data.paymentType,
+      status: data.status,
+      notes: data.notes,
+      // These fields are optional on Purchase but are usually part of form data
+      // Cast to any to satisfy the Omit type if these aren't strictly on Purchase
+      supplierContactPerson: data.supplierContactPerson as any,
+      supplierEmail: data.supplierEmail as any,
+      supplierPhone: data.supplierPhone as any,
+    };
+    onSubmit(purchaseDataForAction);
   };
 
   return (
@@ -138,7 +166,7 @@ export function PurchaseFormDialog({ isOpen, onOpenChange, onSubmit, inventoryPa
                 <Label htmlFor="supplierNameInput">Supplier Name *</Label>
                 <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Controller name="supplierName" control={control} render={({ field }) => (<Input id="supplierNameInput" {...field} onChange={(e) => { field.onChange(e); handleSupplierNameChange(e.target.value); }} onFocus={() => { if (getValues('supplierName')?.length) { const f = inventorySuppliers.filter(s=>s.name.toLowerCase().includes(getValues('supplierName')!.toLowerCase())); if(f.length){setSupplierSuggestions(f); setIsSupplierPopoverOpen(true);}} }} autoComplete="off" /> )} />
+                    <Controller name="supplierName" control={control} render={({ field }) => (<Input id="supplierNameInput" {...field} onChange={(e) => { field.onChange(e); handleSupplierNameChange(e.target.value); }} onFocus={() => { const val = getValues('supplierName'); if(val && val.length > 0) {const f = inventorySuppliers.filter(s=>s.name.toLowerCase().includes(val.toLowerCase())); if(f.length){setSupplierSuggestions(f); setIsSupplierPopoverOpen(true);}} else {setIsSupplierPopoverOpen(false); setSupplierSuggestions([]);} }} autoComplete="off" /> )} />
                   </PopoverTrigger>
                   {supplierSuggestions.length > 0 && (<PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e)=>e.preventDefault()}><div className="max-h-40 overflow-y-auto custom-scrollbar">{supplierSuggestions.map((s) => (<div key={s.id} onClick={() => handleSupplierSelect(s)} className="p-2 hover:bg-accent cursor-pointer text-sm">{s.name}</div>))}</div></PopoverContent>)}
                 </Popover>
@@ -154,24 +182,78 @@ export function PurchaseFormDialog({ isOpen, onOpenChange, onSubmit, inventoryPa
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><Label htmlFor="supplierInvoiceNumber">Supplier Invoice No.</Label><Input id="supplierInvoiceNumber" {...register("supplierInvoiceNumber")} /></div>
               <div><Label htmlFor="purchaseDate">Purchase Date *</Label><Controller name="purchaseDate" control={control} render={({ field }) => (<DatePicker date={field.value || undefined} setDate={(date) => field.onChange(date)} />)} />{errors.purchaseDate && <p className="text-sm text-destructive">{errors.purchaseDate.message}</p>}</div>
-              <div><Label htmlFor="paymentType">Payment Type *</Label><Controller name="paymentType" control={control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank Transfer</SelectItem><SelectItem value="on_credit">On Credit</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select>)} />{errors.paymentType && <p className="text-sm text-destructive">{errors.paymentType.message}</p>}</div>
-              <div><Label htmlFor="status">Status *</Label><Controller name="status" control={control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Ordered">Ordered</SelectItem><SelectItem value="Partially Received">Partially Received</SelectItem><SelectItem value="Received">Received</SelectItem><SelectItem value="Cancelled">Cancelled</SelectItem></SelectContent></Select>)} />{errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}</div>
+              <div><Label htmlFor="paymentType">Payment Type *</Label><Controller name="paymentType" control={control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}><SelectTrigger><SelectValue placeholder="Select payment type" /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank Transfer</SelectItem><SelectItem value="on_credit">On Credit</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select>)} />{errors.paymentType && <p className="text-sm text-destructive">{errors.paymentType.message}</p>}</div>
+              <div><Label htmlFor="status">Status *</Label><Controller name="status" control={control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger><SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Ordered">Ordered</SelectItem><SelectItem value="Partially Received">Partially Received</SelectItem><SelectItem value="Received">Received</SelectItem><SelectItem value="Cancelled">Cancelled</SelectItem></SelectContent></Select>)} />{errors.status && <p className="text-sm text-destructive">{errors.status.message}</p>}</div>
             </div>
           </div>
           <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-md font-medium">Purchase Items</h3>
             {errors.items && !errors.items.message && typeof errors.items === 'object' && (<p className="text-sm text-destructive">Please add at least one item.</p>)}
             {errors.items?.message && <p className="text-sm text-destructive">{errors.items.message}</p>}
+            
             <div className="space-y-3">
-              <div><Label htmlFor="partSearch">Search Part (Name/Number)</Label><Input id="partSearch" value={partSearchTerm} onChange={(e) => handlePartSearch(e.target.value)} placeholder="Type to search part..." autoComplete="off" /></div>
-              <div className="mt-1"> {partSearchTerm && (filteredInventoryParts.length > 0 ? (<div className="bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto custom-scrollbar">{filteredInventoryParts.map(part => (<div key={part.partNumber+"-"+part.mrp} onClick={() => selectPartFromSearch(part)} className="p-2 hover:bg-accent cursor-pointer text-sm">{part.partName} ({part.partNumber}) - Stock: {part.quantity}</div>))}</div>) : (partSearchTerm.length > 0 && !selectedPartForAdding && (<div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">Part not found. Add new parts via Inventory.</div>)))}</div>
-              {selectedPartForAdding && (<p className="text-sm text-muted-foreground mt-1">Selected: {selectedPartForAdding.partName} (Stock: {selectedPartForAdding.quantity})</p>)}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div><Label htmlFor="currentQuantityInput">Quantity to Purchase *</Label><Input id="currentQuantityInput" type="number" value={currentQuantityInput} onChange={(e) => setCurrentQuantityInput(e.target.value ? Number(e.target.value) : '')} min="1" /></div>
-                <div><Label htmlFor="currentUnitCostInput">Unit Cost (₹) *</Label><Input id="currentUnitCostInput" type="number" value={currentUnitCostInput} onChange={(e) => setCurrentUnitCostInput(e.target.value ? Number(e.target.value) : '')} min="0" step="0.01" /></div>
-              </div>
-              <Button type="button" onClick={handleAddItem} className="w-full sm:w-auto" disabled={!selectedPartForAdding}><PlusCircle className="mr-2 h-4 w-4" /> Add Item to PO</Button>
+                <div>
+                    <Label htmlFor="partSearch">Search Part (Name/Number)</Label>
+                    <Input
+                        id="partSearch"
+                        value={partSearchTerm}
+                        onChange={(e) => handlePartSearch(e.target.value)}
+                        placeholder="Type to search part..."
+                        autoComplete="off"
+                    />
+                </div>
+            
+                <div className="mt-1 custom-scrollbar max-h-40 overflow-y-auto"> {/* This block will contain suggestions or 'not found' message */}
+                    {partSearchTerm && (
+                        filteredInventoryParts.length > 0 ? (
+                            <div className="bg-background border rounded-md shadow-lg">
+                                {filteredInventoryParts.map(part => (
+                                    <div
+                                        key={`${part.partNumber}-${part.mrp}`} 
+                                        className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                        onClick={() => selectPartFromSearch(part)}
+                                    >
+                                        {part.partName} ({part.partNumber}) - MRP: {part.mrp} - Stock: {part.quantity}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            partSearchTerm.length > 0 && !selectedPartForAdding && ( 
+                                <div className="mt-2 p-2 border border-dashed rounded-md text-sm text-muted-foreground">
+                                    Part not found: "{partSearchTerm}". Please add new parts via the Inventory page.
+                                </div>
+                            )
+                        )
+                    )}
+                </div>
+
+                {selectedPartForAdding && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Selected: {selectedPartForAdding.partName} (Stock: {selectedPartForAdding.quantity})
+                    </p>
+                )}
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <Label htmlFor="currentQuantityInput">Quantity to Purchase *</Label>
+                        <Input
+                            id="currentQuantityInput" type="number" value={currentQuantityInput}
+                            onChange={(e) => setCurrentQuantityInput(e.target.value ? Number(e.target.value) : '')} min="1"
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="currentUnitCostInput">Unit Cost (₹) *</Label>
+                        <Input
+                            id="currentUnitCostInput" type="number" value={currentUnitCostInput}
+                            onChange={(e) => setCurrentUnitCostInput(e.target.value ? Number(e.target.value) : '')} min="0" step="0.01"
+                        />
+                    </div>
+                </div>
+                <Button type="button" onClick={handleAddItem} className="w-full sm:w-auto" disabled={!selectedPartForAdding}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Item to PO
+                </Button>
             </div>
+
             {fields.length > 0 && (<div className="mt-4"><Table><TableHeader><TableRow><TableHead>Part Name</TableHead><TableHead>Part No.</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Unit Cost</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>{fields.map((item, index) => (<TableRow key={item.id}><TableCell>{item.partName}</TableCell><TableCell>{item.partNumber}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">₹{item.unitCost.toFixed(2)}</TableCell><TableCell className="text-right">₹{(item.quantity * item.unitCost).toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" type="button" onClick={() => remove(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table></div>)}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">

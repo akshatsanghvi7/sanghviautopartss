@@ -27,6 +27,6 @@
     "paymentType": "on_credit",
     "status": "Received",
     "notes": "Purchase Test",
-    "paymentSettled": false
+    "paymentSettled": true
   }
 ]
