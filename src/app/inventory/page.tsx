@@ -25,9 +25,8 @@ const initialMockParts: Part[] = [
   { partName: 'Spark Plug X100', otherName: 'Ignition Plug Alt', partNumber: 'P001', company: 'Bosch', quantity: 50, category: 'Engine', mrp: '₹6.50', shelf: 'A1-04' },
 ];
 
-// Expected Excel column order
 const expectedColumns = ["Part Name", "Other Name", "Part Number", "Company", "Qty", "Category", "MRP", "Shelf"];
-
+const ALL_CATEGORIES_VALUE = "__ALL_CATEGORIES__";
 
 export default function InventoryPage() {
   const { toast } = useToast();
@@ -39,15 +38,15 @@ export default function InventoryPage() {
   const [partToEdit, setPartToEdit] = useState<Part | null>(null);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(''); // For category filter
+  const [selectedCategory, setSelectedCategory] = useState<string>(''); 
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
 
   const formatMrp = (mrpString: string | number): string => {
     if (typeof mrpString === 'number') {
       return `₹${mrpString.toFixed(2)}`;
     }
-    const numericValue = parseFloat(String(mrpString).replace(/[^0-9.-]+/g,""));
-    if (isNaN(numericValue)) return '₹0.00'; // Or handle error
+    const numericValue = parseFloat(String(mrpString).replace(/[^0-9₹.-]+/g,""));
+    if (isNaN(numericValue)) return '₹0.00';
     return `₹${numericValue.toFixed(2)}`;
   };
 
@@ -170,18 +169,15 @@ export default function InventoryPage() {
             const existingPartIndex = newPartsList.findIndex(p => p.partNumber === partNumberVal && p.mrp === formattedMrpFromExcel);
 
             if (existingPartIndex !== -1) {
-              // Part with same partNumber and MRP exists, update it
               const existingPart = newPartsList[existingPartIndex];
               existingPart.partName = partNameVal;
               existingPart.otherName = otherNameVal || undefined;
               existingPart.company = companyVal || undefined;
-              existingPart.quantity += quantity; // Add to existing quantity
+              existingPart.quantity += quantity; 
               existingPart.category = categoryVal;
-              // MRP is already matched, so no change needed. Shelf updated.
               existingPart.shelf = shelfVal || undefined;
               updatedCount++;
             } else {
-              // Part does not exist with this partNumber + MRP combination, add new
               newPartsList.push({
                 partName: partNameVal,
                 otherName: otherNameVal || undefined,
@@ -259,7 +255,7 @@ export default function InventoryPage() {
         part.company || '',
         part.quantity,
         part.category || '',
-        part.mrp || '', // Already formatted
+        part.mrp || '', 
         part.shelf || '',
       ])
     ];
@@ -285,10 +281,11 @@ export default function InventoryPage() {
   };
 
 const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
-    const formattedNewMrp = formatMrp(data.mrp); // MRP from form
+    const formattedNewMrp = formatMrp(data.mrp); 
 
     setMockParts(prevParts => {
         const newPartsList = [...prevParts];
+        let partUpdatedOrAdded = false;
 
         if (formMode === 'edit' && originalPart) {
             const existingPartIndex = newPartsList.findIndex(
@@ -296,15 +293,16 @@ const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
             );
             if (existingPartIndex !== -1) {
                 newPartsList[existingPartIndex] = {
-                    ...newPartsList[existingPartIndex], // Keep original partNumber & MRP
+                    ...newPartsList[existingPartIndex], 
                     partName: data.partName,
                     otherName: data.otherName || undefined,
                     company: data.company || undefined,
-                    quantity: data.quantity, // Replace quantity
+                    quantity: data.quantity, 
                     category: data.category,
                     shelf: data.shelf || undefined,
                 };
                 toast({ title: "Part Updated", description: `${data.partName} (MRP: ${originalPart.mrp}) has been updated.` });
+                partUpdatedOrAdded = true;
             } else {
                 toast({ title: "Update Error", description: "Original part not found for editing.", variant: "destructive" });
                 return prevParts; 
@@ -319,10 +317,11 @@ const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
                 existingPart.partName = data.partName;
                 existingPart.otherName = data.otherName || undefined;
                 existingPart.company = data.company || undefined;
-                existingPart.quantity = data.quantity; // Replace quantity
+                existingPart.quantity = data.quantity; 
                 existingPart.category = data.category;
                 existingPart.shelf = data.shelf || undefined;
                 toast({ title: "Part Details Updated", description: `Details for ${data.partNumber} (MRP: ${formattedNewMrp}) have been updated.` });
+                partUpdatedOrAdded = true;
             } else { 
                 newPartsList.push({
                     partName: data.partName,
@@ -335,9 +334,11 @@ const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
                     shelf: data.shelf || undefined,
                 });
                 toast({ title: "New Part Entry Added", description: `${data.partName} (MRP: ${formattedNewMrp}) has been added.` });
+                partUpdatedOrAdded = true;
             }
         }
-        return newPartsList;
+        if (partUpdatedOrAdded) return newPartsList;
+        return prevParts; 
     });
     setIsPartFormDialogOpen(false);
     setPartToEdit(null);
@@ -448,12 +449,21 @@ const handlePartFormSubmit = (data: PartFormData, originalPart?: Part) => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <Select 
+                value={selectedCategory === "" ? ALL_CATEGORIES_VALUE : selectedCategory} 
+                onValueChange={(value) => {
+                  if (value === ALL_CATEGORIES_VALUE) {
+                    setSelectedCategory("");
+                  } else {
+                    setSelectedCategory(value);
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Filter by Category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value={ALL_CATEGORIES_VALUE}>All Categories</SelectItem>
                   {uniqueCategories.map(category => (
                     <SelectItem key={category} value={category}>{category}</SelectItem>
                   ))}
