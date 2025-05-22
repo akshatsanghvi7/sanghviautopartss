@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -16,14 +15,16 @@ import { PurchaseOrderViewDialog } from '@/components/purchases/PurchaseOrderVie
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { addPurchase, updatePurchaseStatus, updatePurchasePaymentSettled } from './actions';
+import type { AppSettings } from '@/app/settings/actions'; // Import AppSettings
 
 interface PurchasesClientPageProps {
   initialPurchases: Purchase[];
   initialInventoryParts: Part[];
   initialSuppliers: Supplier[];
+  companySettings: AppSettings; // Add companySettings prop
 }
 
-export function PurchasesClientPage({ initialPurchases, initialInventoryParts, initialSuppliers }: PurchasesClientPageProps) {
+export function PurchasesClientPage({ initialPurchases, initialInventoryParts, initialSuppliers, companySettings }: PurchasesClientPageProps) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [purchases, setPurchases] = useState<Purchase[]>(initialPurchases);
@@ -47,7 +48,7 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
     const newPurchaseData: Purchase = {
       id: `PO${Date.now().toString().slice(-5)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`,
       date: data.purchaseDate!.toISOString(), 
-      supplierId: data.supplierId, // Will be set if existing supplier selected
+      supplierId: data.supplierId, 
       supplierName: data.supplierName,
       supplierInvoiceNumber: data.supplierInvoiceNumber,
       items: data.items.map(item => ({
@@ -69,7 +70,6 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
       if (result.success) {
         toast({ title: "Purchase Order Recorded", description: result.message });
         setIsPurchaseFormOpen(false);
-        // Re-fetching handled by revalidatePath in server action
       } else {
         toast({ title: "Error", description: result.message, variant: "destructive" });
       }
@@ -115,7 +115,7 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
     ) && (statusFilters[purchase.status])
   ).sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
   
-  const getOrderStatusColor = (status: Purchase['status']) => { /* ... same as before ... */ 
+  const getOrderStatusColor = (status: Purchase['status']) => { 
     switch (status) {
       case 'Received': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700';
       case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700';
@@ -125,7 +125,7 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600';
     }
   };
-  const getPaymentStatusSelectStyle = (isSettled?: boolean) => { /* ... same as before ... */ 
+  const getPaymentStatusSelectStyle = (isSettled?: boolean) => { 
     if (isSettled) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-800';
     return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-300 dark:border-orange-700 hover:bg-orange-200 dark:hover:bg-orange-800';
   };
@@ -196,7 +196,7 @@ export function PurchasesClientPage({ initialPurchases, initialInventoryParts, i
         </CardContent>
       </Card>
       <PurchaseFormDialog isOpen={isPurchaseFormOpen} onOpenChange={setIsPurchaseFormOpen} onSubmit={handleNewPurchaseSubmit} inventoryParts={inventoryParts} inventorySuppliers={suppliers} />
-      {selectedPurchase && (<PurchaseOrderViewDialog isOpen={isPurchaseViewOpen} onOpenChange={setIsPurchaseViewOpen} purchaseOrder={selectedPurchase} />)}
+      {selectedPurchase && (<PurchaseOrderViewDialog isOpen={isPurchaseViewOpen} onOpenChange={setIsPurchaseViewOpen} purchaseOrder={selectedPurchase} companySettings={companySettings} />)}
     </div>
   );
 }

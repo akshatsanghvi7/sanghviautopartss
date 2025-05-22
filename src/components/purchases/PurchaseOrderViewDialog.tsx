@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Purchase } from '@/lib/types';
@@ -16,27 +15,77 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Printer } from 'lucide-react';
+import { Download, Building, Phone } from 'lucide-react'; // Changed Printer to Download, added Building, Phone
 import { useToast } from '@/hooks/use-toast';
 import AppLogo from '@/components/layout/AppLogo';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import type { AppSettings } from '@/app/settings/actions'; // Assuming settings might be needed for company details
 
 interface PurchaseOrderViewDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   purchaseOrder: Purchase | null;
+  companySettings?: AppSettings; // Optional: if company details from settings are to be displayed
 }
 
-export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }: PurchaseOrderViewDialogProps) {
+export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder, companySettings }: PurchaseOrderViewDialogProps) {
   const { toast } = useToast();
 
   if (!purchaseOrder) return null;
 
-  const handlePrintPO = () => {
-    toast({
-        title: "Print Initiated (Simulated)",
-        description: "If this were a real app, a print dialog for the Purchase Order would appear.",
-    });
+  const handleDownloadPoPdf = () => {
+    const poElement = document.getElementById('printable-po-area');
+    if (poElement) {
+      toast({ title: "Generating PDF...", description: "Please wait while your Purchase Order is prepared." });
+      html2canvas(poElement, { 
+        scale: 2, 
+        useCORS: true, 
+        logging: false,
+        letterRendering: true,
+      }).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'pt',
+          format: 'a4',
+        });
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 20; 
+
+        const usablePdfWidth = pdfWidth - 2 * margin;
+        const usablePdfHeight = pdfHeight - 2 * margin;
+
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const canvasAspectRatio = canvasWidth / canvasHeight;
+
+        let finalImageWidth, finalImageHeight;
+
+        if (usablePdfWidth / canvasAspectRatio <= usablePdfHeight) {
+            finalImageWidth = usablePdfWidth;
+            finalImageHeight = finalImageWidth / canvasAspectRatio;
+        } else {
+            finalImageHeight = usablePdfHeight;
+            finalImageWidth = finalImageHeight * canvasAspectRatio;
+        }
+        
+        const xOffset = margin + (usablePdfWidth - finalImageWidth) / 2;
+        const yOffset = margin + (usablePdfHeight - finalImageHeight) / 2;
+
+        pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalImageWidth, finalImageHeight);
+        pdf.save(`purchase-order-${purchaseOrder.id}.pdf`);
+        toast({ title: "PO Downloaded", description: "Your PDF Purchase Order has been downloaded." });
+      }).catch(err => {
+        console.error("Error generating PO PDF:", err);
+        toast({ title: "PDF Download Failed", description: "Could not generate the Purchase Order PDF.", variant: "destructive" });
+      });
+    } else {
+      toast({ title: "Error", description: "Could not find PO content to download.", variant: "destructive" });
+    }
   };
   
   const getStatusColor = (status: Purchase['status']) => {
@@ -67,16 +116,19 @@ export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }:
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[65vh] pr-6 custom-scrollbar" id="po-content">
-          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm">
+        <ScrollArea className="h-[65vh] pr-6 custom-scrollbar">
+          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm" id="printable-po-area">
             {/* PO Header */}
             <div className="flex justify-between items-start mb-6">
-              <div>
+              <div className="flex-1">
                 <AppLogo className="h-12 w-12 text-primary mb-2" />
-                <h2 className="text-2xl font-bold text-primary">AutoCentral Inc.</h2>
-                <p className="text-muted-foreground">Purchase Order</p>
+                <h2 className="text-2xl font-bold text-primary">{companySettings?.companyName || 'AutoCentral Inc.'}</h2>
+                {companySettings?.companyAddress && <p className="text-muted-foreground text-sm flex items-center gap-1"><Building className="h-3 w-3"/>{companySettings.companyAddress}</p>}
+                {companySettings?.companyGstNumber && <p className="text-muted-foreground text-sm">GSTIN: {companySettings.companyGstNumber}</p>}
+                {companySettings?.companyPhoneNumbers?.[0] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[0]}</p>}
+                {companySettings?.companyPhoneNumbers?.[1] && <p className="text-muted-foreground text-sm flex items-center gap-1"><Phone className="h-3 w-3"/>{companySettings.companyPhoneNumbers[1]}</p>}
               </div>
-              <div className="text-right">
+              <div className="flex-1 text-right">
                 <h1 className="text-3xl font-bold uppercase text-primary">PO #{purchaseOrder.id}</h1>
                 <p className="text-muted-foreground">Date: {format(new Date(purchaseOrder.date), "PPP")}</p>
                 {purchaseOrder.supplierInvoiceNumber && (
@@ -93,7 +145,7 @@ export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }:
             {/* Supplier Details */}
             <div className="mb-6">
                 <h3 className="font-semibold text-lg mb-1 text-primary">Supplier:</h3>
-                <p className="font-medium text-lg">{purchaseOrder.supplierName} <span className="text-sm text-muted-foreground">({purchaseOrder.supplierId})</span></p>
+                <p className="font-medium text-lg">{purchaseOrder.supplierName} {purchaseOrder.supplierId && <span className="text-sm text-muted-foreground">({purchaseOrder.supplierId})</span>}</p>
                 {/* Placeholder for full supplier address if available in future */}
             </div>
 
@@ -177,8 +229,8 @@ export function PurchaseOrderViewDialog({ isOpen, onOpenChange, purchaseOrder }:
         </ScrollArea>
 
         <DialogFooter className="pt-4 border-t">
-          <Button variant="outline" onClick={handlePrintPO}>
-            <Printer className="mr-2 h-4 w-4" /> Print PO
+          <Button variant="outline" onClick={handleDownloadPoPdf}>
+            <Download className="mr-2 h-4 w-4" /> Download PDF
           </Button>
           <DialogClose asChild>
             <Button type="button">Close</Button>
