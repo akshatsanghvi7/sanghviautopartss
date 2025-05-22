@@ -3157,5 +3157,15 @@
     "category": "Oil",
     "mrp": "₹0.00",
     "shelf": "R-4"
+  },
+  {
+    "partName": "Steering Oil",
+    "otherName": "TATA 3515",
+    "partNumber": "12345568",
+    "company": "TATA",
+    "quantity": 5,
+    "category": "Oil",
+    "mrp": "₹1000.00",
+    "shelf": "R-1"
   }
 ]

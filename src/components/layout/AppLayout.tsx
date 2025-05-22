@@ -13,8 +13,8 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import type { Part } from '@/lib/types';
 
-export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEnabledFromSettings, initialInventoryPartsForAlert } : { 
-    children: ReactNode, 
+export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEnabledFromSettings, initialInventoryPartsForAlert } : {
+    children: ReactNode,
     companyNameFromSettings: string,
     lowStockAlertsEnabledFromSettings: boolean,
     initialInventoryPartsForAlert: Part[]
@@ -23,7 +23,7 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
   const router = useRouter();
   const pathname = usePathname(); // Get current path
   const { toast } = useToast();
-  
+
   const [effectiveCompanyName, setEffectiveCompanyName] = useState(companyNameFromSettings || "AutoCentral");
   const [lowStockNotificationShownThisSession, setLowStockNotificationShownThisSession] = useState(false);
 
@@ -45,7 +45,7 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
         toast({
           title: "Low Stock Alert",
           description: `${lowStockItems.length} item(s) are currently low on stock. Check inventory.`,
-          duration: 5000, 
+          duration: 5000,
         });
         setLowStockNotificationShownThisSession(true);
       }
@@ -84,7 +84,9 @@ export function AppLayout({ children, companyNameFromSettings, lowStockAlertsEna
           </Link>
         </SidebarHeader>
         <SidebarContent className="p-2"><SidebarNavItems /></SidebarContent>
-        <SidebarFooter className="p-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">© {new Date().getFullYear()} {effectiveCompanyName || 'AutoCentral Inc.'}</SidebarFooter>
+        <SidebarFooter className="p-2 text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+          Developed by Akshat Sanghvi
+        </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col">
         <Header companyNameFromSettings={effectiveCompanyName} />
