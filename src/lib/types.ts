@@ -6,6 +6,12 @@ export type User = {
   // For this mock, we might not even need a password field on User if login is simulated
 };
 
+export type UserProfile = {
+  username: string; // Acts as the ID
+  fullName: string;
+  email: string;
+};
+
 export type Part = {
   partName: string;
   otherName?: string;

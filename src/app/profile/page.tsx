@@ -8,47 +8,72 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { useEffect, useState } from 'react';
-
-interface ProfileDetails {
-  username: string;
-  email: string;
-  fullName: string;
-  role: string;
-  joinDate: string;
-}
+import { useEffect, useState, startTransition } from 'react';
+import type { UserProfile } from '@/lib/types';
+import { getUserProfile, saveUserProfile } from './actions';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const [profileDetails, setProfileDetails] = useState<ProfileDetails | null>(null);
+  const { toast } = useToast();
+  
+  const [profileDetails, setProfileDetails] = useState<UserProfile | null>(null);
+  const [fullNameInput, setFullNameInput] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // Static details (not fetched from profile, but from auth or hardcoded for demo)
+  const [role, setRole] = useState('Administrator');
+  const [joinDate, setJoinDate] = useState('2023-01-15');
 
   useEffect(() => {
-    if (user) {
-      // Attempt to create a more presentable full name from username
-      const nameParts = user.username.split('.').map(part => part.charAt(0).toUpperCase() + part.slice(1));
-      const fullName = nameParts.join(' ');
-      
-      setProfileDetails({
-        username: user.username,
-        email: `${user.username}@autocentral.app`, // Placeholder email
-        fullName: fullName,
-        role: 'Administrator', // Static mock data
-        joinDate: '2023-01-15', // Static mock data
+    if (user?.username) {
+      setIsLoadingProfile(true);
+      startTransition(async () => {
+        const fetchedProfile = await getUserProfile(user.username);
+        setProfileDetails(fetchedProfile);
+        setFullNameInput(fetchedProfile.fullName);
+        setEmailInput(fetchedProfile.email);
+        setIsLoadingProfile(false);
       });
+    } else {
+      setIsLoadingProfile(false);
+      setProfileDetails(null); // Clear profile if no user
     }
   }, [user]);
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
     if (!name) return '??';
     const names = name.split(' ');
     if (names.length === 1 && names[0].length > 0) return names[0].substring(0, 2).toUpperCase();
     if (names.length > 1 && names[0].length > 0 && names[names.length - 1].length > 0) {
       return (names[0][0] + names[names.length - 1][0]).toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase(); // Fallback for single word or unexpected format
+    return name.substring(0, 2).toUpperCase(); // Fallback
   }
 
-  if (!profileDetails) {
+  const handleSaveChanges = async () => {
+    if (!user?.username || !profileDetails) {
+      toast({ title: "Error", description: "User not found.", variant: "destructive" });
+      return;
+    }
+    const updatedProfile: UserProfile = {
+      ...profileDetails,
+      fullName: fullNameInput,
+      email: emailInput,
+    };
+    startTransition(async () => {
+      const result = await saveUserProfile(updatedProfile);
+      if (result.success) {
+        toast({ title: "Profile Updated", description: result.message });
+        setProfileDetails(updatedProfile); // Update local state to reflect saved changes
+      } else {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+      }
+    });
+  };
+
+  if (isLoadingProfile) {
     return (
       <div className="flex justify-center items-center h-full">
         <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -58,6 +83,15 @@ export default function ProfilePage() {
       </div>
     );
   }
+  
+  if (!user || !profileDetails) {
+     return (
+      <div className="flex justify-center items-center h-full">
+        <p>Please log in to view your profile.</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,42 +105,42 @@ export default function ProfilePage() {
         <CardContent className="space-y-8">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(profileDetails.fullName)}`} alt={profileDetails.fullName} data-ai-hint="person portrait" />
-              <AvatarFallback>{getInitials(profileDetails.fullName)}</AvatarFallback>
+              <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(fullNameInput || user.username)}`} alt={fullNameInput || user.username} data-ai-hint="person portrait" />
+              <AvatarFallback>{getInitials(fullNameInput || user.username)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-1 text-center sm:text-left">
-              <h2 className="text-2xl font-semibold">{profileDetails.fullName}</h2>
-              <p className="text-muted-foreground">{profileDetails.email}</p>
-              <p className="text-sm text-muted-foreground">Role: {profileDetails.role}</p>
-              <p className="text-sm text-muted-foreground">Joined: {new Date(profileDetails.joinDate).toLocaleDateString()}</p>
+              <h2 className="text-2xl font-semibold">{fullNameInput || 'N/A'}</h2>
+              <p className="text-muted-foreground">{emailInput || 'N/A'}</p>
+              <p className="text-sm text-muted-foreground">Role: {role}</p>
+              <p className="text-sm text-muted-foreground">Joined: {new Date(joinDate).toLocaleDateString()}</p>
             </div>
             <Button variant="outline" disabled>Change Avatar</Button>
           </div>
 
           <Separator />
 
-          <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
-              <Input id="fullName" defaultValue={profileDetails.fullName} disabled />
+              <Input id="fullName" value={fullNameInput} onChange={(e) => setFullNameInput(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" defaultValue={profileDetails.username} disabled />
+              <Input id="username" value={user.username} disabled />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" defaultValue={profileDetails.email} disabled />
+              <Input id="email" type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Input id="role" defaultValue={profileDetails.role} disabled />
+              <Input id="role" value={role} disabled />
             </div>
           
             <div className="md:col-span-2 flex justify-end">
-              <Button disabled>Save Changes</Button>
+              <Button onClick={handleSaveChanges}>Save Changes</Button>
             </div>
-          </form>
+          </div>
 
           <Separator />
 
