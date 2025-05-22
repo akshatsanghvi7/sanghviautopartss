@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [profileDetails, setProfileDetails] = useState<UserProfile | null>(null);
   const [fullNameInput, setFullNameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
+  const [avatarUrlInput, setAvatarUrlInput] = useState('');
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   // Static details (not fetched from profile, but from auth or hardcoded for demo)
@@ -34,6 +35,7 @@ export default function ProfilePage() {
         setProfileDetails(fetchedProfile);
         setFullNameInput(fetchedProfile.fullName);
         setEmailInput(fetchedProfile.email);
+        setAvatarUrlInput(fetchedProfile.avatarUrl || '');
         setIsLoadingProfile(false);
       });
     } else {
@@ -59,8 +61,10 @@ export default function ProfilePage() {
     }
     const updatedProfile: UserProfile = {
       ...profileDetails,
+      username: user.username, // Ensure username from auth is used
       fullName: fullNameInput,
       email: emailInput,
+      avatarUrl: avatarUrlInput || undefined, // Store as undefined if empty
     };
     startTransition(async () => {
       const result = await saveUserProfile(updatedProfile);
@@ -92,7 +96,6 @@ export default function ProfilePage() {
     );
   }
 
-
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-3xl font-bold tracking-tight text-foreground">User Profile</h1>
@@ -105,7 +108,11 @@ export default function ProfilePage() {
         <CardContent className="space-y-8">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(fullNameInput || user.username)}`} alt={fullNameInput || user.username} data-ai-hint="person portrait" />
+              <AvatarImage 
+                src={profileDetails.avatarUrl || undefined} // Use undefined to trigger fallback correctly
+                alt={fullNameInput || user.username} 
+                data-ai-hint="person portrait" 
+              />
               <AvatarFallback>{getInitials(fullNameInput || user.username)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-1 text-center sm:text-left">
@@ -114,7 +121,7 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground">Role: {role}</p>
               <p className="text-sm text-muted-foreground">Joined: {new Date(joinDate).toLocaleDateString()}</p>
             </div>
-            <Button variant="outline" disabled>Change Avatar</Button>
+            {/* "Change Avatar" button removed in favor of URL input */}
           </div>
 
           <Separator />
@@ -133,6 +140,16 @@ export default function ProfilePage() {
               <Input id="email" type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="avatarUrl">Avatar URL (Optional)</Label>
+              <Input 
+                id="avatarUrl" 
+                type="url" 
+                value={avatarUrlInput} 
+                onChange={(e) => setAvatarUrlInput(e.target.value)} 
+                placeholder="https://example.com/image.png"
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2"> 
               <Label htmlFor="role">Role</Label>
               <Input id="role" value={role} disabled />
             </div>

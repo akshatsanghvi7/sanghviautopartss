@@ -17,7 +17,7 @@ function deriveFullName(username: string): string {
 
 export async function getUserProfile(username: string): Promise<UserProfile> {
   if (!username) {
-    return { username: '', fullName: 'Guest User', email: '' };
+    return { username: '', fullName: 'Guest User', email: '', avatarUrl: undefined };
   }
   const profiles = await readData<UserProfile[]>(USER_PROFILES_FILE, []);
   const userProfile = profiles.find(p => p.username === username);
@@ -30,6 +30,7 @@ export async function getUserProfile(username: string): Promise<UserProfile> {
       username: username,
       fullName: deriveFullName(username),
       email: `${username}@autocentral.app`, // Default placeholder
+      avatarUrl: undefined, // No default avatar URL
     };
   }
 }
@@ -50,7 +51,10 @@ export async function saveUserProfile(profileData: UserProfile): Promise<{ succe
 
     await writeData(USER_PROFILES_FILE, profiles);
     revalidatePath('/profile'); // Revalidate the profile page
-    revalidatePath('/layout'); // Revalidate layout if it uses profile info (e.g., user nav display name if it were from profile)
+    // Revalidate AppLayout if UserNav uses avatarUrl directly from a context that might be updated
+    // For now, UserNav's avatar is static, so only /profile is strictly needed.
+    // Consider revalidating layout if UserNav becomes more dynamic with avatarUrl.
+    // revalidatePath('/layout'); 
     return { success: true, message: 'Profile updated successfully.' };
   } catch (error) {
     console.error('Error saving user profile:', error);

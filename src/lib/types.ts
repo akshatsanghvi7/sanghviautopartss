@@ -10,6 +10,7 @@ export type UserProfile = {
   username: string; // Acts as the ID
   fullName: string;
   email: string;
+  avatarUrl?: string; // Optional field for avatar image URL
 };
 
 export type Part = {
