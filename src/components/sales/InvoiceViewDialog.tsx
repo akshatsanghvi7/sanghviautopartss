@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Mail, Download, Phone, Building } from 'lucide-react'; // Changed Printer to Download
+import { Mail, Download, Phone, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import AppLogo from '@/components/layout/AppLogo';
 import type { AppSettings } from '@/app/settings/actions';
@@ -55,9 +55,10 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
     if (invoiceElement) {
       toast({ title: "Generating PDF...", description: "Please wait while your invoice is prepared." });
       html2canvas(invoiceElement, { 
-        scale: 2, // Increase scale for better quality
+        scale: 2, 
         useCORS: true, 
-        logging: false, // Reduce console noise
+        logging: false,
+        letterRendering: true, // Added for potentially better text rendering
       }).then((canvas) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
@@ -68,27 +69,32 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 20; // General margin for top/bottom/left/right in points
+
+        const usablePdfWidth = pdfWidth - 2 * margin;
+        const usablePdfHeight = pdfHeight - 2 * margin;
 
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
-        
-        // Calculate the ratio to fit the image onto the PDF page, maintaining aspect ratio
-        const imgRatio = canvasWidth / canvasHeight;
-        const pdfRatio = pdfWidth / pdfHeight;
+        const canvasAspectRatio = canvasWidth / canvasHeight;
 
-        let finalPdfImageWidth = pdfWidth;
-        let finalPdfImageHeight = pdfWidth / imgRatio;
+        let finalImageWidth, finalImageHeight;
 
-        if (finalPdfImageHeight > pdfHeight) {
-            finalPdfImageHeight = pdfHeight;
-            finalPdfImageWidth = pdfHeight * imgRatio;
+        // Determine if we should fit by width or by height based on aspect ratios
+        if (usablePdfWidth / canvasAspectRatio <= usablePdfHeight) {
+            // Fit by width
+            finalImageWidth = usablePdfWidth;
+            finalImageHeight = finalImageWidth / canvasAspectRatio;
+        } else {
+            // Fit by height
+            finalImageHeight = usablePdfHeight;
+            finalImageWidth = finalImageHeight * canvasAspectRatio;
         }
         
-        // Center the image on the page
-        const xOffset = (pdfWidth - finalPdfImageWidth) / 2;
-        const yOffset = 0; // Start from top or add small margin e.g. 20
+        const xOffset = margin + (usablePdfWidth - finalImageWidth) / 2;
+        const yOffset = margin + (usablePdfHeight - finalImageHeight) / 2;
 
-        pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalPdfImageWidth, finalPdfImageHeight);
+        pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalImageWidth, finalImageHeight);
         pdf.save(`invoice-${sale.id}.pdf`);
         toast({ title: "Invoice Downloaded", description: "Your PDF invoice has been downloaded." });
       }).catch(err => {
@@ -111,8 +117,8 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[65vh] pr-6 custom-scrollbar" id="invoice-content-scrollarea"> {/* ID changed for clarity */}
-          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm" id="printable-invoice-area"> {/* Added ID here */}
+        <ScrollArea className="h-[65vh] pr-6 custom-scrollbar" id="invoice-content-scrollarea">
+          <div className="p-6 border rounded-lg bg-card text-card-foreground shadow-sm" id="printable-invoice-area">
             {/* Invoice Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
