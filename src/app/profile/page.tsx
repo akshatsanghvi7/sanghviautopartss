@@ -121,7 +121,7 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground">Role: {role}</p>
               <p className="text-sm text-muted-foreground">Joined: {new Date(joinDate).toLocaleDateString()}</p>
             </div>
-            {/* "Change Avatar" button removed in favor of URL input */}
+            {/* "Change Avatar" button removed */}
           </div>
 
           <Separator />
