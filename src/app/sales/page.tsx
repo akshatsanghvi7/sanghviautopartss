@@ -30,12 +30,10 @@ export default async function SalesPage() {
   // Customers might be empty initially, so no fallback needed if file is empty array
   
   return (
-    <AppLayout>
-      <SalesClientPage 
-        initialSales={currentSales} 
-        initialInventoryParts={currentParts}
-        initialCustomers={customers} // Pass all customers for context
-      />
-    </AppLayout>
+    <SalesClientPage 
+      initialSales={currentSales} 
+      initialInventoryParts={currentParts}
+      initialCustomers={customers} // Pass all customers for context
+    />
   );
 }

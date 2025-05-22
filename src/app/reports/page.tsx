@@ -6,8 +6,6 @@ import { ReportsClientPage } from './ReportsClientPage';
 export default function ReportsPage() {
   // Data for reports will be fetched on client by calling server actions
   return (
-    <AppLayout>
-      <ReportsClientPage />
-    </AppLayout>
+    <ReportsClientPage />
   );
 }

@@ -14,12 +14,10 @@ export default async function PurchasesPage() {
   const suppliers = await getSuppliers();
 
   return (
-    <AppLayout>
-      <PurchasesClientPage 
-        initialPurchases={purchases.length > 0 ? purchases : initialMockPurchases} 
-        initialInventoryParts={inventoryParts.length > 0 ? inventoryParts : initialMockParts}
-        initialSuppliers={suppliers.length > 0 ? suppliers : initialMockSuppliers}
-      />
-    </AppLayout>
+    <PurchasesClientPage 
+      initialPurchases={purchases.length > 0 ? purchases : initialMockPurchases} 
+      initialInventoryParts={inventoryParts.length > 0 ? inventoryParts : initialMockParts}
+      initialSuppliers={suppliers.length > 0 ? suppliers : initialMockSuppliers}
+    />
   );
 }

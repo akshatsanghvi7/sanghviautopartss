@@ -7,8 +7,6 @@ export default async function DashboardPage() {
   const dashboardData = await getDashboardData();
   
   return (
-    <AppLayout>
-      <DashboardClientPage initialDashboardData={dashboardData} />
-    </AppLayout>
+    <DashboardClientPage initialDashboardData={dashboardData} />
   );
 }

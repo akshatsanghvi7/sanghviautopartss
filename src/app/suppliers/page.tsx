@@ -12,11 +12,9 @@ export default async function SuppliersPage() {
   const allPurchases = await getAllPurchasesForHistory();
 
   return (
-    <AppLayout>
-      <SuppliersClientPage 
-        initialSuppliers={suppliersWithBalances.length > 0 ? suppliersWithBalances : initialMockSuppliers}
-        allPurchasesForHistory={allPurchases}
-      />
-    </AppLayout>
+    <SuppliersClientPage 
+      initialSuppliers={suppliersWithBalances.length > 0 ? suppliersWithBalances : initialMockSuppliers}
+      allPurchasesForHistory={allPurchases}
+    />
   );
 }

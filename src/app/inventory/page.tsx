@@ -21,8 +21,6 @@ export default async function InventoryPage() {
 
 
   return (
-    <AppLayout>
-      <InventoryClientPage initialParts={currentParts} />
-    </AppLayout>
+    <InventoryClientPage initialParts={currentParts} />
   );
 }

@@ -6,8 +6,6 @@ import { SettingsClientPage } from './SettingsClientPage';
 export default async function SettingsPage() {
   const settings = await getSettings();
   return (
-    <AppLayout>
-      <SettingsClientPage initialSettings={settings} />
-    </AppLayout>
+    <SettingsClientPage initialSettings={settings} />
   );
 }

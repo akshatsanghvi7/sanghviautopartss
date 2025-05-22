@@ -15,11 +15,9 @@ export default async function CustomersPage() {
   const allSales = await readData<Sale[]>('sales.json', []); // Pass all sales for history dialog
 
   return (
-    <AppLayout>
-      <CustomersClientPage 
-        initialCustomers={customersWithBalances.length > 0 ? customersWithBalances : initialMockCustomers} 
-        allSalesForHistory={allSales}
-      />
-    </AppLayout>
+    <CustomersClientPage 
+      initialCustomers={customersWithBalances.length > 0 ? customersWithBalances : initialMockCustomers} 
+      allSalesForHistory={allSales}
+    />
   );
 }
