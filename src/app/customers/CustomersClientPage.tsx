@@ -10,8 +10,8 @@ import type { Customer, Sale } from '@/lib/types';
 import React, { useState, useMemo, useEffect, startTransition } from 'react'; 
 import { useToast } from "@/hooks/use-toast";
 import { CustomerSalesHistoryDialog } from '@/components/customers/CustomerSalesHistoryDialog';
-import { DeleteCustomerDialog } from '@/components/customers/DeleteCustomerDialog'; // Added
-import { deleteCustomerAction } from './actions'; // Added
+import { DeleteCustomerDialog } from '@/components/customers/DeleteCustomerDialog';
+import { deleteCustomerAction } from './actions';
 
 interface CustomersClientPageProps {
   initialCustomers: Customer[];
@@ -26,26 +26,17 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
 
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false); // Added
-  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null); // Added
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
 
   useEffect(() => {
     setCustomers(initialCustomers);
   }, [initialCustomers]);
 
   const processedCustomersWithBalance = useMemo(() => {
-    const uniqueCustomersByName: Record<string, Customer> = {};
-    customers.forEach(customer => {
-      const normalizedName = customer.name.toLowerCase();
-      if (!uniqueCustomersByName[normalizedName]) {
-        uniqueCustomersByName[normalizedName] = { ...customer, balance: Number(customer.balance) || 0 };
-      } else {
-        if (!uniqueCustomersByName[normalizedName].email && customer.email) uniqueCustomersByName[normalizedName].email = customer.email;
-        if (!uniqueCustomersByName[normalizedName].phone && customer.phone) uniqueCustomersByName[normalizedName].phone = customer.phone;
-        // Balance from server action is authoritative for the initial list.
-      }
-    });
-    return Object.values(uniqueCustomersByName);
+    // Server action `getCustomersWithCalculatedBalances` now provides the authoritative list
+    // with balances correctly calculated and duplicates handled.
+    return customers.map(c => ({ ...c, balance: Number(c.balance) || 0 }));
   }, [customers]);
 
 
@@ -60,7 +51,7 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
   const handleAddCustomer = () => toast({ title: "Info", description: "Customers are automatically added/updated via the Sales page." });
   const handleEditCustomer = (customerId: string) => toast({ title: "Feature Coming Soon", description: `Editing customer ${customerId} will be implemented.` });
   
-  const handleDeleteCustomer = (customer: Customer) => { // Changed to accept customer object
+  const handleDeleteCustomerClick = (customer: Customer) => {
     setCustomerToDelete(customer);
     setIsDeleteConfirmOpen(true);
   };
@@ -71,7 +62,7 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
       const result = await deleteCustomerAction(customerToDelete.id);
       if (result.success) {
         toast({ title: "Customer Deleted", description: `${customerToDelete.name} has been deleted.` });
-        // No need to manually filter client state, revalidation will refresh
+        // The list will re-render due to revalidatePath in the server action
       } else {
         toast({ title: "Error", description: result.message, variant: "destructive" });
       }
@@ -116,7 +107,7 @@ export function CustomersClientPage({ initialCustomers, allSalesForHistory }: Cu
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewHistory(customer)} title="View Sales History"><History className="h-4 w-4" /><span className="sr-only">View Sales History</span></Button>
                     <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleEditCustomer(customer.id)} title="Edit Customer"><Edit2 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomer(customer)} title="Delete Customer"><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button>
+                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteCustomerClick(customer)} title="Delete Customer"><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button>
                   </TableCell>
                 </TableRow>
               ))}
