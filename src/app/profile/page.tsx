@@ -20,7 +20,6 @@ export default function ProfilePage() {
   const [profileDetails, setProfileDetails] = useState<UserProfile | null>(null);
   const [fullNameInput, setFullNameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  // const [avatarUrlInput, setAvatarUrlInput] = useState(''); // Removed
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   // Static details (not fetched from profile, but from auth or hardcoded for demo)
@@ -35,7 +34,6 @@ export default function ProfilePage() {
         setProfileDetails(fetchedProfile);
         setFullNameInput(fetchedProfile.fullName);
         setEmailInput(fetchedProfile.email);
-        // setAvatarUrlInput(fetchedProfile.avatarUrl || ''); // Removed
         setIsLoadingProfile(false);
       });
     } else {
@@ -55,21 +53,22 @@ export default function ProfilePage() {
   }
 
   const handleSaveChanges = async () => {
-    if (!user?.username || !profileDetails) {
-      toast({ title: "Error", description: "User not found.", variant: "destructive" });
+    if (!user?.username) {
+      toast({ title: "Error", description: "User not found. Please log in again.", variant: "destructive" });
       return;
     }
-    const updatedProfile: UserProfile = {
-      username: user.username, // Ensure username from auth is used
+    // UserProfile type no longer includes avatarUrl, so it's removed here
+    const updatedProfileData: UserProfile = {
+      username: user.username, 
       fullName: fullNameInput,
       email: emailInput,
-      // avatarUrl: avatarUrlInput || undefined, // Removed
     };
     startTransition(async () => {
-      const result = await saveUserProfile(updatedProfile);
+      const result = await saveUserProfile(updatedProfileData);
       if (result.success) {
         toast({ title: "Profile Updated", description: result.message });
-        setProfileDetails(updatedProfile); // Update local state to reflect saved changes
+        // Update profileDetails to reflect saved changes in the display section
+        setProfileDetails(updatedProfileData); 
       } else {
         toast({ title: "Error", description: result.message, variant: "destructive" });
       }
@@ -107,16 +106,17 @@ export default function ProfilePage() {
         <CardContent className="space-y-8">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <Avatar className="h-24 w-24">
+              {/* AvatarImage src is intentionally undefined as avatarUrl feature was removed */}
               <AvatarImage 
-                src={undefined} // No avatar URL to provide
-                alt={fullNameInput || user.username} 
+                src={undefined} 
+                alt={profileDetails.fullName || user.username} 
                 data-ai-hint="person portrait" 
               />
-              <AvatarFallback>{getInitials(fullNameInput || user.username)}</AvatarFallback>
+              <AvatarFallback>{getInitials(profileDetails.fullName || user.username)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-1 text-center sm:text-left">
-              <h2 className="text-2xl font-semibold">{fullNameInput || 'N/A'}</h2>
-              <p className="text-muted-foreground">{emailInput || 'N/A'}</p>
+              <h2 className="text-2xl font-semibold">{profileDetails.fullName || 'N/A'}</h2>
+              <p className="text-muted-foreground">{profileDetails.email || 'N/A'}</p>
               <p className="text-sm text-muted-foreground">Role: {role}</p>
               <p className="text-sm text-muted-foreground">Joined: {new Date(joinDate).toLocaleDateString()}</p>
             </div>
@@ -137,7 +137,6 @@ export default function ProfilePage() {
               <Label htmlFor="email">Email Address</Label>
               <Input id="email" type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
             </div>
-            {/* Avatar URL input removed */}
             <div className="space-y-2"> 
               <Label htmlFor="role">Role</Label>
               <Input id="role" value={role} disabled />
