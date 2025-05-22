@@ -3,7 +3,7 @@
 
 import type { Sale, Purchase, Part, SaleItem, PurchaseItem } from '@/lib/types';
 import { readData } from '@/lib/file-data-utils';
-import { isWithinInterval, parseISO, startOfDay, endOfDay, format as formatDate, subDays } from 'date-fns';
+import { isWithinInterval, parseISO, startOfDay, endOfDay, format as formatDate, subDays, isValid } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 
 const SALES_FILE = 'sales.json';
@@ -28,7 +28,7 @@ export interface StockMovementData { data: StockMovementEntry[]; hasData: boolea
 
 const parseMrpToNumber = (mrpString?: string): number => {
   if (!mrpString) return 0;
-  const numericValue = parseFloat(String(mrpString).replace(/[^0-9.-]+/g,""));
+  const numericValue = parseFloat(String(mrpString).replace(/[^0-9₹.-]+/g,""));
   return isNaN(numericValue) ? 0 : numericValue;
 };
 
@@ -39,6 +39,7 @@ export async function generateSalesSummaryReport(dateRange: DateRange): Promise<
   
   const filteredSales = sales.filter(s => 
     s.status !== 'Cancelled' && 
+    s.date && isValid(parseISO(s.date)) && // Ensure date is valid
     isWithinInterval(parseISO(s.date), { start: fromDate, end: toDate })
   );
 
@@ -49,10 +50,14 @@ export async function generateSalesSummaryReport(dateRange: DateRange): Promise<
   filteredSales.forEach(s => {
     totalSales += s.netAmount;
     if (s.paymentType === 'cash') cashSales += s.netAmount; else creditSales += s.netAmount;
-    s.items.forEach(i => {
-      if (!productQuantities[i.partNumber]) productQuantities[i.partNumber] = { name: i.partName, quantity: 0 };
-      productQuantities[i.partNumber].quantity += i.quantitySold;
-    });
+    if (s.items && Array.isArray(s.items)) {
+      s.items.forEach(i => {
+        if (i && i.partNumber && typeof i.quantitySold === 'number') {
+            if (!productQuantities[i.partNumber]) productQuantities[i.partNumber] = { name: i.partName || 'Unknown Part', quantity: 0 };
+            productQuantities[i.partNumber].quantity += i.quantitySold;
+        }
+      });
+    }
   });
   let highestSellingProduct: SalesSummaryData['highestSellingProduct'] = null; let maxQty = 0;
   for (const pn in productQuantities) {
@@ -68,8 +73,12 @@ export async function generatePurchaseSummaryReport(dateRange: DateRange): Promi
   if (!dateRange.from || !dateRange.to) return { message: "Date range is required." };
   const purchases = await readData<Purchase[]>(PURCHASES_FILE, []);
   const fromDate = startOfDay(dateRange.from); const toDate = endOfDay(dateRange.to);
-  // Assuming purchases don't have a 'Cancelled' status that affects summary, but if they do, filter here.
-  const filteredPurchases = purchases.filter(p => isWithinInterval(parseISO(p.date), { start: fromDate, end: toDate }));
+  
+  const filteredPurchases = purchases.filter(p => 
+    p.status !== 'Cancelled' && // Exclude cancelled purchases from summary
+    p.date && isValid(parseISO(p.date)) && // Ensure date is valid
+    isWithinInterval(parseISO(p.date), { start: fromDate, end: toDate })
+  );
 
   if (filteredPurchases.length === 0) return { totalPurchases: 0, numberOfPurchaseOrders: 0, mostFrequentPart: null, topSupplierByValue: null };
 
@@ -81,10 +90,14 @@ export async function generatePurchaseSummaryReport(dateRange: DateRange): Promi
     const supKey = p.supplierId || p.supplierName.toLowerCase();
     if (!supplierValues[supKey]) supplierValues[supKey] = { name: p.supplierName, totalValue: 0 };
     supplierValues[supKey].totalValue += p.netAmount;
-    p.items.forEach(i => {
-      if(!partQtys[i.partNumber]) partQtys[i.partNumber] = { name: i.partName, quantity: 0 };
-      partQtys[i.partNumber].quantity += i.quantityPurchased;
-    });
+    if (p.items && Array.isArray(p.items)) {
+      p.items.forEach(i => {
+        if (i && i.partNumber && typeof i.quantityPurchased === 'number') {
+            if(!partQtys[i.partNumber]) partQtys[i.partNumber] = { name: i.partName || 'Unknown Part', quantity: 0 };
+            partQtys[i.partNumber].quantity += i.quantityPurchased;
+        }
+      });
+    }
   });
   let mostFreqPart: PurchaseSummaryData['mostFrequentPart'] = null; let maxPQty = 0;
   for(const pn in partQtys) if(partQtys[pn].quantity > maxPQty) { maxPQty = partQtys[pn].quantity; mostFreqPart = {partNumber: pn, name: partQtys[pn].name, quantity: partQtys[pn].quantity};}
@@ -96,30 +109,58 @@ export async function generatePurchaseSummaryReport(dateRange: DateRange): Promi
 export async function generateInventoryValuationReport(): Promise<InventoryValuationData> {
   const parts = await readData<Part[]>(PARTS_FILE, []);
   let totalValue = 0, totalQuantity = 0;
-  parts.forEach(p => { totalValue += p.quantity * parseMrpToNumber(p.mrp); totalQuantity += p.quantity; });
+  parts.forEach(p => { 
+    if (p && typeof p.quantity === 'number' && p.mrp) {
+        totalValue += p.quantity * parseMrpToNumber(p.mrp); 
+        totalQuantity += p.quantity; 
+    }
+  });
   return { totalValue, numberOfUniqueParts: parts.length, totalQuantityOfParts: totalQuantity };
 }
 
 export async function generateStockMovementReport(): Promise<StockMovementData> {
   const sales = await readData<Sale[]>(SALES_FILE, []);
   const purchases = await readData<Purchase[]>(PURCHASES_FILE, []);
-  const today = new Date(); const data: StockMovementEntry[] = []; let hasMovement = false;
+  const today = new Date(); 
+  const data: StockMovementEntry[] = []; 
+  let hasMovement = false;
+
   for (let i = 6; i >= 0; i--) {
-    const currentDayStart = startOfDay(subDays(today, i)); const currentDayEnd = endOfDay(currentDayStart);
+    const currentDay = subDays(today, i);
+    const currentDayStart = startOfDay(currentDay); 
+    const currentDayEnd = endOfDay(currentDay);
+    
     let dailySold = 0; 
     sales.forEach(s => { 
-      if(s.status !== 'Cancelled' && isWithinInterval(parseISO(s.date), {start: currentDayStart, end: currentDayEnd})) {
-        s.items.forEach(it => dailySold += it.quantitySold); 
+      if(s && s.date && s.items && Array.isArray(s.items) && s.status !== 'Cancelled') {
+        const saleDate = parseISO(s.date);
+        if (isValid(saleDate) && isWithinInterval(saleDate, {start: currentDayStart, end: currentDayEnd})) {
+          s.items.forEach(it => {
+            if (it && typeof it.quantitySold === 'number') {
+              dailySold += it.quantitySold;
+            } 
+          }); 
+        }
       }
     });
+
     let dailyPurchased = 0; 
     purchases.forEach(p => { 
-      if(p.status === 'Received' && isWithinInterval(parseISO(p.date), {start: currentDayStart, end: currentDayEnd})) {
-        p.items.forEach(it => dailyPurchased += it.quantityPurchased); 
+      if (p && p.date && p.items && Array.isArray(p.items) && p.status === 'Received') {
+        const purchaseDate = parseISO(p.date);
+        if (isValid(purchaseDate) && isWithinInterval(purchaseDate, {start: currentDayStart, end: currentDayEnd})) {
+          p.items.forEach(it => {
+            if (it && typeof it.quantityPurchased === 'number') {
+              dailyPurchased += it.quantityPurchased;
+            }
+          });
+        }
       }
     });
+    
     if(dailySold > 0 || dailyPurchased > 0) hasMovement = true;
     data.push({ date: formatDate(currentDayStart, "MMM d"), sold: dailySold, purchased: dailyPurchased });
   }
   return { data, hasData: hasMovement };
 }
+
