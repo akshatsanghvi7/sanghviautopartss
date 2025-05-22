@@ -35,13 +35,12 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
 
-  // Update client-side parts when initialParts prop changes (e.g., after revalidation)
   useEffect(() => {
     setParts(initialParts);
   }, [initialParts]);
 
 
-  const formatMrp = (mrpString: string | number): string => {
+  const formatMrpForDisplay = (mrpString: string | number): string => {
     if (typeof mrpString === 'number') {
       return `₹${mrpString.toFixed(2)}`;
     }
@@ -112,7 +111,14 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
           }
           const [partNameVal, otherNameVal, partNumberVal, companyVal, quantityStrVal, categoryVal, mrpValExcel, shelfVal] = row.map(cell => cell !== null && cell !== undefined ? String(cell).trim() : '');
           const quantity = parseInt(quantityStrVal, 10);
-          const formattedMrpFromExcel = formatMrp(mrpValExcel);
+          
+          // Format MRP from Excel immediately to "₹XX.XX"
+          const formattedMrpFromExcel = (() => {
+            if (typeof mrpValExcel === 'number') return `₹${mrpValExcel.toFixed(2)}`;
+            const numeric = parseFloat(String(mrpValExcel).replace(/[^0-9.-]+/g,""));
+            return isNaN(numeric) ? '₹0.00' : `₹${numeric.toFixed(2)}`;
+          })();
+
 
           if (isNaN(quantity) || !partNumberVal || !partNameVal || !mrpValExcel) {
             skippedCount++;
@@ -125,7 +131,7 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
             company: companyVal || undefined,
             quantity,
             category: categoryVal,
-            mrp: formattedMrpFromExcel,
+            mrp: formattedMrpFromExcel, // Use the correctly formatted MRP
             shelf: shelfVal || undefined,
           });
         }
@@ -172,13 +178,17 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
   };
 
   const handlePartFormSubmit = async (data: PartFormData, originalPart?: Part) => {
+    // data.mrp from PartFormDialog is already in "₹XX.XX" format
     const partToSubmit: Part = {
-      ...data,
-      mrp: formatMrp(data.mrp), // Ensure MRP is formatted correctly before sending
+      ...data, // Spreads PartFormData (partName, otherName, partNumber, company, quantity, category, shelf)
+      mrp: data.mrp, // Use the already formatted MRP string directly from the dialog
     };
 
     startTransition(async () => {
-      const result = await addOrUpdatePart(partToSubmit);
+      // Pass originalPart to addOrUpdatePart if it's an edit, so server action can identify it.
+      // For composite key (partNumber + mrp), we might need to send the original part's identifier.
+      // The addOrUpdatePart server action needs to handle the "add or update" logic based on partNumber and mrp.
+      const result = await addOrUpdatePart(partToSubmit, originalPart);
       if (result.success) {
         toast({ title: result.message });
         setIsPartFormDialogOpen(false);
@@ -209,6 +219,7 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
   const confirmDeletePart = async () => {
     if (partToDelete) {
       startTransition(async () => {
+        // For composite key, delete action needs both partNumber and mrp
         const result = await deletePartAction({ partNumber: partToDelete.partNumber, mrp: partToDelete.mrp });
         if (result.success) {
           toast({ title: "Part Deleted", description: `${partToDelete.partName} (MRP: ${partToDelete.mrp}) deleted.`, variant: "destructive" });
@@ -234,6 +245,7 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
     }).sort((a, b) => {
       if (a.partNumber < b.partNumber) return -1;
       if (a.partNumber > b.partNumber) return 1;
+      // If part numbers are equal, sort by MRP (parsing to float for numeric sort)
       const mrpA = parseFloat(a.mrp.replace('₹', ''));
       const mrpB = parseFloat(b.mrp.replace('₹', ''));
       if (mrpA < mrpB) return -1;
@@ -304,7 +316,14 @@ export function InventoryClientPage({ initialParts }: InventoryClientPageProps) 
           {filteredParts.length === 0 && (<div className="text-center py-10 text-muted-foreground">{parts.length > 0 && (searchTerm || selectedCategory) ? 'No parts match criteria.' : 'No parts found.'}</div>)}
         </CardContent>
       </Card>
-      <PartFormDialog isOpen={isPartFormDialogOpen} onOpenChange={setIsPartFormDialogOpen} onSubmit={handlePartFormSubmit} initialData={partToEdit} dialogTitle={formMode === 'add' ? 'Add/Update Part Entry' : 'Edit Part Entry'} formMode={formMode} />
+      <PartFormDialog 
+        isOpen={isPartFormDialogOpen} 
+        onOpenChange={setIsPartFormDialogOpen} 
+        onSubmit={handlePartFormSubmit} 
+        initialData={partToEdit} 
+        dialogTitle={formMode === 'add' ? 'Add/Update Part Entry' : 'Edit Part Entry'} 
+        formMode={formMode} 
+      />
       {partToDelete && (<DeletePartDialog isOpen={isDeleteConfirmDialogOpen} onOpenChange={setIsDeleteConfirmDialogOpen} onConfirm={confirmDeletePart} partName={`${partToDelete.partName} (MRP: ${partToDelete.mrp})`} />)}
     </div>
   );

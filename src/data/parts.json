@@ -3137,5 +3137,25 @@
     "category": "Nut",
     "mrp": "₹60.00",
     "shelf": "R-5"
+  },
+  {
+    "partName": "Engine Oil",
+    "otherName": "TATA 3515",
+    "partNumber": "1234556",
+    "company": "TATA",
+    "quantity": 10,
+    "category": "Oil",
+    "mrp": "₹0.00",
+    "shelf": "R-4"
+  },
+  {
+    "partName": "Break Oil",
+    "otherName": "TATA 3515",
+    "partNumber": "12345567",
+    "company": "TATA",
+    "quantity": 10,
+    "category": "Oil",
+    "mrp": "₹0.00",
+    "shelf": "R-4"
   }
 ]
