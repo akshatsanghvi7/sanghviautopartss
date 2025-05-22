@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,17 +20,31 @@ export function SettingsClientPage({ initialSettings }: SettingsClientPageProps)
   const [companyName, setCompanyName] = useState(initialSettings.companyName);
   const [companyAddress, setCompanyAddress] = useState(initialSettings.companyAddress);
   const [lowStockAlertsEnabled, setLowStockAlertsEnabled] = useState(initialSettings.lowStockAlertsEnabled);
+  const [companyGstNumber, setCompanyGstNumber] = useState(initialSettings.companyGstNumber || '');
+  const [companyPhoneNumber1, setCompanyPhoneNumber1] = useState(initialSettings.companyPhoneNumbers?.[0] || '');
+  const [companyPhoneNumber2, setCompanyPhoneNumber2] = useState(initialSettings.companyPhoneNumbers?.[1] || '');
+  
   const { toast } = useToast();
 
   useEffect(() => {
     setCompanyName(initialSettings.companyName);
     setCompanyAddress(initialSettings.companyAddress);
     setLowStockAlertsEnabled(initialSettings.lowStockAlertsEnabled);
+    setCompanyGstNumber(initialSettings.companyGstNumber || '');
+    setCompanyPhoneNumber1(initialSettings.companyPhoneNumbers?.[0] || '');
+    setCompanyPhoneNumber2(initialSettings.companyPhoneNumbers?.[1] || '');
   }, [initialSettings]);
 
   const handleSaveGeneralSettings = async () => {
     startTransition(async () => {
-      const result = await saveSettings({ companyName, companyAddress, lowStockAlertsEnabled });
+      const settingsToSave: AppSettings = {
+        companyName,
+        companyAddress,
+        lowStockAlertsEnabled,
+        companyGstNumber,
+        companyPhoneNumbers: [companyPhoneNumber1, companyPhoneNumber2],
+      };
+      const result = await saveSettings(settingsToSave);
       if (result.success) {
         toast({ title: "Settings Saved", description: result.message });
       } else {
@@ -41,12 +56,17 @@ export function SettingsClientPage({ initialSettings }: SettingsClientPageProps)
   const handleLowStockAlertsToggle = async (checked: boolean) => {
     setLowStockAlertsEnabled(checked);
      startTransition(async () => {
-      // Save immediately on toggle for switches
-      const result = await saveSettings({ companyName, companyAddress, lowStockAlertsEnabled: checked });
+      const settingsToSave: AppSettings = {
+        companyName,
+        companyAddress,
+        lowStockAlertsEnabled: checked,
+        companyGstNumber,
+        companyPhoneNumbers: [companyPhoneNumber1, companyPhoneNumber2],
+      };
+      const result = await saveSettings(settingsToSave);
       if (result.success) {
         toast({ title: "Low Stock Alerts " + (checked ? "Enabled" : "Disabled") });
       } else {
-        // Revert UI if save failed
         setLowStockAlertsEnabled(!checked);
         toast({ title: "Error", description: result.message, variant: "destructive" });
       }
@@ -70,6 +90,20 @@ export function SettingsClientPage({ initialSettings }: SettingsClientPageProps)
             <div className="space-y-2">
               <Label htmlFor="companyAddress">Company Address</Label>
               <Input id="companyAddress" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyGstNumber">Company GST Number</Label>
+              <Input id="companyGstNumber" value={companyGstNumber} onChange={(e) => setCompanyGstNumber(e.target.value)} placeholder="e.g., 22AAAAA0000A1Z5" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyPhoneNumber1">Company Phone Number 1</Label>
+                <Input id="companyPhoneNumber1" type="tel" value={companyPhoneNumber1} onChange={(e) => setCompanyPhoneNumber1(e.target.value)} placeholder="e.g., +91-1234567890" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyPhoneNumber2">Company Phone Number 2 (Optional)</Label>
+                <Input id="companyPhoneNumber2" type="tel" value={companyPhoneNumber2} onChange={(e) => setCompanyPhoneNumber2(e.target.value)} placeholder="e.g., 080-23456789" />
+              </div>
             </div>
             <div className="flex justify-end">
               <Button onClick={handleSaveGeneralSettings}>Save General Settings</Button>
