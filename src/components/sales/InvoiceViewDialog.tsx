@@ -58,7 +58,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
         scale: 2, 
         useCORS: true, 
         logging: false,
-        letterRendering: true,
+        letterRendering: true, // Added for potentially better text rendering
       }).then((canvas) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
@@ -80,14 +80,18 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
 
         let finalImageWidth, finalImageHeight;
 
+        // Determine scaling to fit within usable area while maintaining aspect ratio
         if (usablePdfWidth / canvasAspectRatio <= usablePdfHeight) {
+            // Fit to width
             finalImageWidth = usablePdfWidth;
             finalImageHeight = finalImageWidth / canvasAspectRatio;
         } else {
+            // Fit to height
             finalImageHeight = usablePdfHeight;
             finalImageWidth = finalImageHeight * canvasAspectRatio;
         }
         
+        // Calculate offsets to center the image
         const xOffset = margin + (usablePdfWidth - finalImageWidth) / 2;
         const yOffset = margin + (usablePdfHeight - finalImageHeight) / 2;
 
@@ -144,9 +148,9 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
                 {sale.emailAddress && <p className="text-muted-foreground">{sale.emailAddress}</p>}
                 {sale.gstNumber && <p className="text-muted-foreground">GSTIN: {sale.gstNumber}</p>}
               </div>
-              <div className="flex flex-col items-end"> {/* Apply flex and align-items-end for better control */}
-                 <h3 className="font-semibold text-lg mb-1 text-primary self-end">Payment Details:</h3>
-                 <p className="self-end">Payment Type: <span className="font-medium">{sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}</span></p>
+              <div className="text-right"> {/* Applied text-right to the parent container of payment details */}
+                 <h3 className="font-semibold text-lg mb-1 text-primary">Payment Details:</h3>
+                 <p>Payment Type: <span className="font-medium">{sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}</span></p>
               </div>
             </div>
 
@@ -180,19 +184,19 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
             {/* Totals Section */}
             <div className="flex justify-end mb-6">
               <div className="w-full max-w-xs space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal:</span>
+                <div className="flex"> {/* Using flex for each row */}
+                  <span className="text-muted-foreground flex-grow">Subtotal:</span>
                   <span className="font-medium text-right">₹{sale.subTotal.toFixed(2)}</span>
                 </div>
                 {sale.discount !== undefined && sale.discount > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Discount:</span>
+                  <div className="flex"> {/* Using flex for each row */}
+                    <span className="text-muted-foreground flex-grow">Discount:</span>
                     <span className="font-medium text-right">-₹{sale.discount.toFixed(2)}</span>
                   </div>
                 )}
                  <Separator />
-                <div className="flex justify-between text-lg font-bold">
-                  <span className="text-primary">Net Amount:</span>
+                <div className="flex text-lg font-bold"> {/* Using flex for each row */}
+                  <span className="text-primary flex-grow">Net Amount:</span>
                   <span className="text-primary text-right">₹{sale.netAmount.toFixed(2)}</span>
                 </div>
               </div>
@@ -223,4 +227,3 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
     </Dialog>
   );
 }
-
