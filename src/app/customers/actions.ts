@@ -19,24 +19,25 @@ export async function getCustomersWithCalculatedBalances(): Promise<Customer[]> 
     customerMap.set(c.name.toLowerCase(), { ...c, balance: Number(c.balance) || 0 });
   });
   
-  // Recalculate balances based on credit sales for existing customers
-  const customersWithCalculatedBalance = customers.map(customer => {
-    let currentBalance = 0; // Start from 0 for calculation
-    sales.forEach(sale => {
-      if (sale.buyerName.toLowerCase() === customer.name.toLowerCase() && sale.paymentType === 'credit') {
-        currentBalance += sale.netAmount;
+  // Reset balances before recalculating to ensure accuracy if sales are cancelled/payment types change
+  Array.from(customerMap.values()).forEach(c => c.balance = 0);
+  
+  // Recalculate balances based on 'credit' sales that are not 'Cancelled'
+  sales.forEach(sale => {
+    if (sale.paymentType === 'credit' && sale.status !== 'Cancelled') {
+      const customerKey = sale.buyerName.toLowerCase();
+      if (customerMap.has(customerKey)) {
+        const customer = customerMap.get(customerKey)!;
+        customer.balance += sale.netAmount;
+      } else {
+        // This case should ideally be handled when a sale is made, creating the customer.
+        // If a customer exists in sales but not in customers.json, this logic might be needed.
+        // For now, we assume customers are added via sales actions.
       }
-    });
-    // Check if customer already has a manually adjusted balance; if so, that takes precedence.
-    // This simple model assumes `customer.balance` from the file is the source of truth *if* it exists and isn't the default 0 from a fresh add.
-    // For this version, we recalculate based on sales if the stored balance seems like an uninitialized/default state.
-    // A more advanced system would differentiate between calculated and manually set balances.
-    // For now, we will directly use the calculated credit sales.
-    return { ...customer, balance: currentBalance };
+    }
   });
 
-
-  return customersWithCalculatedBalance;
+  return Array.from(customerMap.values()).sort((a,b) => a.name.localeCompare(b.name));
 }
 
 export async function deleteCustomerAction(customerId: string): Promise<{ success: boolean; message: string }> {
@@ -71,8 +72,6 @@ export async function updateCustomerBalanceAction(customerId: string, newBalance
     customers[customerIndex].balance = newBalance;
     await writeData(CUSTOMERS_FILE, customers);
     revalidatePath('/customers');
-    // Optionally revalidate dashboard if it shows aggregate customer balances
-    // revalidatePath('/dashboard'); 
     return { success: true, message: `Amount Due for ${customers[customerIndex].name} updated to ₹${newBalance.toFixed(2)}.` };
   } catch (error) {
     console.error('Error updating customer balance:', error);

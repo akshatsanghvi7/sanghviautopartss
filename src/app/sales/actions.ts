@@ -21,18 +21,19 @@ export async function getCustomers(): Promise<Customer[]> {
   return readData<Customer[]>(CUSTOMERS_FILE, []);
 }
 
-export async function addSale(newSale: Sale): Promise<{ success: boolean; message: string }> {
+export async function addSale(newSale: Omit<Sale, 'status'>): Promise<{ success: boolean; message: string }> {
   try {
+    const saleWithStatus: Sale = { ...newSale, status: 'Completed' };
     // 1. Add Sale
     let sales = await getSales();
-    sales.unshift(newSale); // Add to the beginning for chronological order display
+    sales.unshift(saleWithStatus); 
     await writeData(SALES_FILE, sales);
 
     // 2. Update Inventory Parts
     let parts = await getInventoryParts();
     let inventoryUpdated = false;
-    for (const saleItem of newSale.items) {
-      const partIndex = parts.findIndex(p => p.partNumber === saleItem.partNumber && p.mrp === `₹${saleItem.unitPrice.toFixed(2)}`); // Match on MRP too
+    for (const saleItem of saleWithStatus.items) {
+      const partIndex = parts.findIndex(p => p.partNumber === saleItem.partNumber && p.mrp === `₹${saleItem.unitPrice.toFixed(2)}`);
       if (partIndex !== -1) {
         parts[partIndex].quantity = Math.max(0, parts[partIndex].quantity - saleItem.quantitySold);
         inventoryUpdated = true;
@@ -44,29 +45,29 @@ export async function addSale(newSale: Sale): Promise<{ success: boolean; messag
 
     // 3. Update or Add Customer and their balance
     let customers = await getCustomers();
-    const existingCustomerIndex = customers.findIndex(c => c.name.toLowerCase() === newSale.buyerName.toLowerCase());
+    const existingCustomerIndex = customers.findIndex(c => c.name.toLowerCase() === saleWithStatus.buyerName.toLowerCase());
     let customerMessage = "";
 
     if (existingCustomerIndex !== -1) {
       const existingCustomer = customers[existingCustomerIndex];
       let currentBalance = Number(existingCustomer.balance) || 0;
-      if (newSale.paymentType === 'credit') {
-        currentBalance += newSale.netAmount;
+      if (saleWithStatus.paymentType === 'credit') {
+        currentBalance += saleWithStatus.netAmount;
       }
       customers[existingCustomerIndex] = {
         ...existingCustomer,
-        email: newSale.emailAddress || existingCustomer.email,
-        phone: newSale.contactDetails || existingCustomer.phone,
+        email: saleWithStatus.emailAddress || existingCustomer.email,
+        phone: saleWithStatus.contactDetails || existingCustomer.phone,
         balance: currentBalance,
       };
       customerMessage = `Customer ${existingCustomer.name} balance updated.`;
     } else {
       const newCustomer: Customer = {
         id: `CUST${Date.now().toString().slice(-5)}`,
-        name: newSale.buyerName,
-        email: newSale.emailAddress,
-        phone: newSale.contactDetails,
-        balance: newSale.paymentType === 'credit' ? newSale.netAmount : 0,
+        name: saleWithStatus.buyerName,
+        email: saleWithStatus.emailAddress,
+        phone: saleWithStatus.contactDetails,
+        balance: saleWithStatus.paymentType === 'credit' ? saleWithStatus.netAmount : 0,
       };
       customers.unshift(newCustomer);
       customerMessage = `New customer ${newCustomer.name} added.`;
@@ -74,11 +75,11 @@ export async function addSale(newSale: Sale): Promise<{ success: boolean; messag
     await writeData(CUSTOMERS_FILE, customers);
 
     revalidatePath('/sales');
-    revalidatePath('/inventory'); // Because stock changed
-    revalidatePath('/customers'); // Because customer list/balance might have changed
-    revalidatePath('/dashboard'); // Dashboard shows sales/customer data
+    revalidatePath('/inventory');
+    revalidatePath('/customers');
+    revalidatePath('/dashboard');
 
-    return { success: true, message: `Sale ${newSale.id} recorded. ${customerMessage}` };
+    return { success: true, message: `Sale ${saleWithStatus.id} recorded. ${customerMessage}` };
   } catch (error) {
     console.error('Error in addSale:', error);
     return { success: false, message: 'Failed to record sale.' };
@@ -94,6 +95,9 @@ export async function updateSalePaymentType(saleId: string, newPaymentType: 'cas
     }
 
     const saleToUpdate = sales[saleIndex];
+    if (saleToUpdate.status === 'Cancelled') {
+      return { success: false, message: 'Cannot change payment type for a cancelled sale.' };
+    }
     const oldPaymentType = saleToUpdate.paymentType;
     saleToUpdate.paymentType = newPaymentType;
     await writeData(SALES_FILE, sales);
@@ -124,3 +128,62 @@ export async function updateSalePaymentType(saleId: string, newPaymentType: 'cas
   }
 }
 
+export async function cancelSaleAction(saleId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    let sales = await getSales();
+    const saleIndex = sales.findIndex(s => s.id === saleId);
+
+    if (saleIndex === -1) {
+      return { success: false, message: 'Sale not found.' };
+    }
+    const saleToCancel = sales[saleIndex];
+    if (saleToCancel.status === 'Cancelled') {
+      return { success: false, message: 'Sale is already cancelled.' };
+    }
+
+    const oldStatus = saleToCancel.status;
+    saleToCancel.status = 'Cancelled';
+
+    // Adjust Inventory: Add back sold items
+    let parts = await getInventoryParts();
+    let inventoryUpdated = false;
+    for (const item of saleToCancel.items) {
+      const partIndex = parts.findIndex(p => p.partNumber === item.partNumber && p.mrp === `₹${item.unitPrice.toFixed(2)}`);
+      if (partIndex !== -1) {
+        parts[partIndex].quantity += item.quantitySold;
+        inventoryUpdated = true;
+      } else {
+        // If part was deleted from inventory after sale, it might not be found. Log this.
+        console.warn(`Part ${item.partNumber} with MRP ₹${item.unitPrice.toFixed(2)} not found for inventory reversal during sale cancellation.`);
+      }
+    }
+    if (inventoryUpdated) {
+      await writeData(PARTS_FILE, parts);
+    }
+
+    // Adjust Customer Balance: If it was a credit sale and not already cancelled
+    let customerBalanceUpdated = false;
+    if (saleToCancel.paymentType === 'credit' && oldStatus !== 'Cancelled') {
+      let customers = await getCustomers();
+      const customerIndex = customers.findIndex(c => c.name.toLowerCase() === saleToCancel.buyerName.toLowerCase());
+      if (customerIndex !== -1) {
+        customers[customerIndex].balance = Math.max(0, (Number(customers[customerIndex].balance) || 0) - saleToCancel.netAmount);
+        await writeData(CUSTOMERS_FILE, customers);
+        customerBalanceUpdated = true;
+      }
+    }
+
+    await writeData(SALES_FILE, sales);
+
+    revalidatePath('/sales');
+    if (inventoryUpdated) revalidatePath('/inventory');
+    if (customerBalanceUpdated) revalidatePath('/customers');
+    revalidatePath('/dashboard'); // Dashboard shows sales/customer/inventory data
+    revalidatePath('/reports'); // Reports use this data
+
+    return { success: true, message: `Sale ${saleId} has been cancelled. Inventory and customer balance (if applicable) adjusted.` };
+  } catch (error) {
+    console.error('Error cancelling sale:', error);
+    return { success: false, message: 'Failed to cancel sale.' };
+  }
+}

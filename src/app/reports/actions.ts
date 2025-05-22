@@ -36,7 +36,11 @@ export async function generateSalesSummaryReport(dateRange: DateRange): Promise<
   if (!dateRange.from || !dateRange.to) return { message: "Date range is required." };
   const sales = await readData<Sale[]>(SALES_FILE, []);
   const fromDate = startOfDay(dateRange.from); const toDate = endOfDay(dateRange.to);
-  const filteredSales = sales.filter(s => isWithinInterval(parseISO(s.date), { start: fromDate, end: toDate }));
+  
+  const filteredSales = sales.filter(s => 
+    s.status !== 'Cancelled' && 
+    isWithinInterval(parseISO(s.date), { start: fromDate, end: toDate })
+  );
 
   if (filteredSales.length === 0) return { totalSales: 0, cashSales: 0, creditSales: 0, highestSellingProduct: null, numberOfTransactions: 0 };
   
@@ -64,6 +68,7 @@ export async function generatePurchaseSummaryReport(dateRange: DateRange): Promi
   if (!dateRange.from || !dateRange.to) return { message: "Date range is required." };
   const purchases = await readData<Purchase[]>(PURCHASES_FILE, []);
   const fromDate = startOfDay(dateRange.from); const toDate = endOfDay(dateRange.to);
+  // Assuming purchases don't have a 'Cancelled' status that affects summary, but if they do, filter here.
   const filteredPurchases = purchases.filter(p => isWithinInterval(parseISO(p.date), { start: fromDate, end: toDate }));
 
   if (filteredPurchases.length === 0) return { totalPurchases: 0, numberOfPurchaseOrders: 0, mostFrequentPart: null, topSupplierByValue: null };
@@ -101,8 +106,18 @@ export async function generateStockMovementReport(): Promise<StockMovementData> 
   const today = new Date(); const data: StockMovementEntry[] = []; let hasMovement = false;
   for (let i = 6; i >= 0; i--) {
     const currentDayStart = startOfDay(subDays(today, i)); const currentDayEnd = endOfDay(currentDayStart);
-    let dailySold = 0; sales.forEach(s => { if(isWithinInterval(parseISO(s.date), {start: currentDayStart, end: currentDayEnd})) s.items.forEach(it => dailySold += it.quantitySold); });
-    let dailyPurchased = 0; purchases.forEach(p => { if(p.status === 'Received' && isWithinInterval(parseISO(p.date), {start: currentDayStart, end: currentDayEnd})) p.items.forEach(it => dailyPurchased += it.quantityPurchased); });
+    let dailySold = 0; 
+    sales.forEach(s => { 
+      if(s.status !== 'Cancelled' && isWithinInterval(parseISO(s.date), {start: currentDayStart, end: currentDayEnd})) {
+        s.items.forEach(it => dailySold += it.quantitySold); 
+      }
+    });
+    let dailyPurchased = 0; 
+    purchases.forEach(p => { 
+      if(p.status === 'Received' && isWithinInterval(parseISO(p.date), {start: currentDayStart, end: currentDayEnd})) {
+        p.items.forEach(it => dailyPurchased += it.quantityPurchased); 
+      }
+    });
     if(dailySold > 0 || dailyPurchased > 0) hasMovement = true;
     data.push({ date: formatDate(currentDayStart, "MMM d"), sold: dailySold, purchased: dailyPurchased });
   }

@@ -22,6 +22,7 @@ import AppLogo from '@/components/layout/AppLogo';
 import type { AppSettings } from '@/app/settings/actions';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { Badge } from '@/components/ui/badge'; // Import Badge
 
 interface InvoiceViewDialogProps {
   isOpen: boolean;
@@ -36,6 +37,10 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
   if (!sale) return null;
 
   const handleMailInvoice = () => {
+    if (sale.status === 'Cancelled') {
+      toast({ title: "Action Not Allowed", description: "Cannot mail a cancelled invoice.", variant: "destructive" });
+      return;
+    }
     if (sale.emailAddress) {
       toast({
         title: "Invoice Mailed (Simulated)",
@@ -58,7 +63,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
         scale: 2, 
         useCORS: true, 
         logging: false,
-        letterRendering: true, // Added for potentially better text rendering
+        letterRendering: true,
       }).then((canvas) => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
@@ -80,23 +85,19 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
 
         let finalImageWidth, finalImageHeight;
 
-        // Determine scaling to fit within usable area while maintaining aspect ratio
         if (usablePdfWidth / canvasAspectRatio <= usablePdfHeight) {
-            // Fit to width
             finalImageWidth = usablePdfWidth;
             finalImageHeight = finalImageWidth / canvasAspectRatio;
         } else {
-            // Fit to height
             finalImageHeight = usablePdfHeight;
             finalImageWidth = finalImageHeight * canvasAspectRatio;
         }
         
-        // Calculate offsets to center the image
         const xOffset = margin + (usablePdfWidth - finalImageWidth) / 2;
         const yOffset = margin + (usablePdfHeight - finalImageHeight) / 2;
 
         pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalImageWidth, finalImageHeight);
-        pdf.save(`invoice-${sale.id}.pdf`);
+        pdf.save(`invoice-${sale.id}${sale.status === 'Cancelled' ? '-CANCELLED' : ''}.pdf`);
         toast({ title: "Invoice Downloaded", description: "Your PDF invoice has been downloaded." });
       }).catch(err => {
         console.error("Error generating PDF:", err);
@@ -112,7 +113,10 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Invoice Details - #{sale.id}</DialogTitle>
+          <DialogTitle className="flex items-center justify-between">
+            <span>Invoice Details - #{sale.id}</span>
+            {sale.status === 'Cancelled' && <Badge variant="destructive" className="text-lg">CANCELLED</Badge>}
+          </DialogTitle>
           <DialogDescription>
             Sale recorded on {format(new Date(sale.date), "PPPp")}
           </DialogDescription>
@@ -134,6 +138,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
                 <h1 className="text-3xl font-bold uppercase text-primary">Invoice</h1>
                 <p className="text-muted-foreground">Invoice #: {sale.id}</p>
                 <p className="text-muted-foreground">Date: {format(new Date(sale.date), "PPP")}</p>
+                 {sale.status === 'Cancelled' && <p className="text-destructive font-bold text-lg mt-1">STATUS: CANCELLED</p>}
               </div>
             </div>
 
@@ -148,7 +153,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
                 {sale.emailAddress && <p className="text-muted-foreground">{sale.emailAddress}</p>}
                 {sale.gstNumber && <p className="text-muted-foreground">GSTIN: {sale.gstNumber}</p>}
               </div>
-              <div className="text-right"> {/* Applied text-right to the parent container of payment details */}
+              <div className="text-right">
                  <h3 className="font-semibold text-lg mb-1 text-primary">Payment Details:</h3>
                  <p>Payment Type: <span className="font-medium">{sale.paymentType.charAt(0).toUpperCase() + sale.paymentType.slice(1)}</span></p>
               </div>
@@ -184,18 +189,18 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
             {/* Totals Section */}
             <div className="flex justify-end mb-6">
               <div className="w-full max-w-xs space-y-2">
-                <div className="flex"> {/* Using flex for each row */}
+                <div className="flex"> 
                   <span className="text-muted-foreground flex-grow">Subtotal:</span>
                   <span className="font-medium text-right">₹{sale.subTotal.toFixed(2)}</span>
                 </div>
                 {sale.discount !== undefined && sale.discount > 0 && (
-                  <div className="flex"> {/* Using flex for each row */}
+                  <div className="flex"> 
                     <span className="text-muted-foreground flex-grow">Discount:</span>
                     <span className="font-medium text-right">-₹{sale.discount.toFixed(2)}</span>
                   </div>
                 )}
                  <Separator />
-                <div className="flex text-lg font-bold"> {/* Using flex for each row */}
+                <div className="flex text-lg font-bold"> 
                   <span className="text-primary flex-grow">Net Amount:</span>
                   <span className="text-primary text-right">₹{sale.netAmount.toFixed(2)}</span>
                 </div>
@@ -213,7 +218,7 @@ export function InvoiceViewDialog({ isOpen, onOpenChange, sale, companySettings 
         </ScrollArea>
 
         <DialogFooter className="pt-4 border-t">
-          <Button variant="outline" onClick={handleMailInvoice} disabled={!sale.emailAddress}>
+          <Button variant="outline" onClick={handleMailInvoice} disabled={!sale.emailAddress || sale.status === 'Cancelled'}>
             <Mail className="mr-2 h-4 w-4" /> Mail Invoice
           </Button>
           <Button variant="outline" onClick={handleDownloadPdf}>

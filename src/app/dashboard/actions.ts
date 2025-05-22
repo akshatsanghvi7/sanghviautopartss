@@ -33,21 +33,25 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
   const fiscalYearStartDateForDisplay = startOfDay(fiscalYearStart);
 
-  const salesInFiscalYear = sales.filter(sale => {
+  // Filter for completed sales only
+  const completedSales = sales.filter(sale => sale.status !== 'Cancelled');
+
+  const salesInFiscalYear = completedSales.filter(sale => {
     const saleDate = parseISO(sale.date);
     return isWithinInterval(saleDate, { start: fiscalYearStartDateForDisplay, end: now });
   });
   const totalRevenue = salesInFiscalYear.reduce((acc, sale) => acc + sale.netAmount, 0);
 
   const partsInStock = inventoryParts.reduce((acc, part) => acc + part.quantity, 0);
-  const activeCustomers = new Set(sales.map(sale => sale.buyerName.toLowerCase())).size;
+  const activeCustomers = new Set(completedSales.map(sale => sale.buyerName.toLowerCase())).size;
   
-  const salesTodayCount = sales.filter(sale => {
+  const salesTodayCount = completedSales.filter(sale => {
       const saleDate = parseISO(sale.date);
       return isWithinInterval(saleDate, { start: todayStart, end: todayEnd });
   }).length;
 
-  const recentSales = [...sales]
+  // Recent sales can include cancelled ones but should indicate status
+  const recentSales = [...sales] // Use all sales for recent, status will be shown
       .sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
       .slice(0, 7);
 

@@ -41,6 +41,7 @@ export type Sale = {
   discount?: number; // Discount amount
   netAmount: number; // subTotal - discount
   paymentType: 'cash' | 'credit';
+  status?: 'Completed' | 'Cancelled'; // New field for sale status
   // billSent?: boolean; // Could be added later
 };
 
